@@ -1,4 +1,4 @@
-fc_template:
+fc_deep:
   local_dataset:
     train: "train.npy"
     test: "test.npy"
@@ -12,3 +12,57 @@ fc_template:
   results:
     pred: "y_pred.csv"
     target: "y_test.csv"
+
+
+  federated_hyper_parameters:
+    max_iter: 10
+    n_classes: 10
+    federated_model: 'FedMMB'
+    batch_count: 1
+
+
+
+  train_config:
+    torch_loader: False # True: using torchvision Dataloader, False using custom Dataloader
+    batch_size: 32
+    test_batch_size: 32
+    epochs: 1
+    optimizer:
+      name: 'SGD'
+      param:
+        lr: 0.1
+    loss:
+      name: 'CrossEntropyLoss'
+
+
+  model:
+    - type: 'Conv2d'
+      param:
+        in_channels: None
+        out_channels: 32
+        kernel_size: 3
+        stride: 1
+        padding: 1
+        bias: True
+    - type: 'MaxPool2d'
+      param:
+        kernel_size: 2
+        stride: 2
+    - type: 'ReLU'
+    - type: 'Conv2d'
+      param:
+        in_channels: 32
+        out_channels: 64
+    - type: 'MaxPool2d'
+    - type: 'ReLU'
+    - type: 'Flatten'
+    - type: 'Linear'
+      param:
+        in_features: None
+        out_features: 128
+        bias: True
+    - type: 'ReLU'
+    - type: 'Linear'
+      param:
+        in_features: 128
+        out_features: 10

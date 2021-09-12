@@ -1,4 +1,10 @@
 bottle
+numpy
+scipy
+scikit-learn
+matplotlib
+seaborn
 jsonpickle
 joblib
 bios
+pandas
