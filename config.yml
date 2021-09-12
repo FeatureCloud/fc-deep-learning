@@ -1,0 +1,14 @@
+fc_template:
+  local_dataset:
+    train: "train.npy"
+    test: "test.npy"
+
+
+  logic:
+    mode: "file"
+    dir: "."
+
+
+  results:
+    pred: "y_pred.csv"
+    target: "y_test.csv"
