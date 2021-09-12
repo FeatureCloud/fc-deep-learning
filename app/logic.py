@@ -203,16 +203,16 @@ class AppLogic:
         self.status_available = True
         print(f'{bcolors.SEND_RECEIVE} [COORDINATOR] Broadcasting data to clients. {bcolors.ENDC}', flush=True)
 
-    def lazy_initialization(self, mode, dir):
+    def lazy_initialization(self, mode, directory):
         """
 
         Parameters
         ----------
         mode: str
-        dir: str
+        directory: str
         """
         self.mode = mode
-        self.dir = dir
+        self.dir = directory
 
 
 class TextColor:

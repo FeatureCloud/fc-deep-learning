@@ -45,7 +45,7 @@ def get_base_model_config(stats, hyper_parameters):
     return config
 
 
-def load_dataloader(x, y, batch_size):
+def load_data_loader(x, y, batch_size):
     """
 
     Parameters
@@ -69,8 +69,7 @@ def load_dataloader(x, y, batch_size):
 
 
 def design_model(config, sample):
-    # x_train, y_train = sample
-    ds = load_dataloader(sample[0], sample[1], batch_size=1)
+    ds = load_data_loader(sample[0], sample[1], batch_size=1)
     sample_data = next(iter(ds))[0]
     del ds
     layer_default = {}

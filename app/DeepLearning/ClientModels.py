@@ -43,8 +43,8 @@ class ClientModels:
         Normalize and store the dataset inside the model.
     get_weights()
     set_weights(self, weights)
-    evaluate(dataloader)
-    predict(dataloader)
+    evaluate(data_loader)
+    predict(data_loader)
 
     """
 
@@ -61,24 +61,28 @@ class ClientModels:
         self.batch_count = batch_count
         self.num_trained_samples = 0
 
-    def update(self, dataloader, weights, state_dict, verbose=False):
+    def update(self, data_loader, weights, state_dict, verbose=False):
         """update client's model for all of its data for E epochs
             and decreases the learning rate of DNN.
 
         Parameters
         ----------
+        data_loader: DataLoader
+            Custom data loader
         weights : list
             weights of Deep Neural Network
+        state_dict: dict
+            Pytorch Optimizers Parameters
         verbose: bool
             printing an evaluation report
         """
         self.model.set_weights(weights)
         self.model.set_optimizer_params(state_dict)
         if self.train_all:
-            self.model.fit(dataloader, verbose=verbose)
-            self.num_trained_samples = len(dataloader)
+            self.model.fit(data_loader, verbose=verbose)
+            self.num_trained_samples = len(data_loader)
         else:
-            _, _, self.num_trained_samples = self.model.train_on_batches(dataloader, self.batch_count, verbose)
+            _, _, self.num_trained_samples = self.model.train_on_batches(data_loader, self.batch_count, verbose)
 
     def get_weights(self):
         """ get model's weights
@@ -105,7 +109,8 @@ class ClientModels:
 
         Parameters
         ----------
-        dataloader:
+        test_loader: DataLoader
+            Custom data loader
 
         Returns
         -------

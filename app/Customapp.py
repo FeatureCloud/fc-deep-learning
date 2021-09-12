@@ -18,7 +18,7 @@
 """
 from .logic import bcolors
 from .Customlogic import CustomLogic
-from app.DeepLearning.utils import load_dataloader
+from app.DeepLearning.utils import load_data_loader
 from app.DeepLearning.ClientModels import ClientModels
 from app.DeepLearning.utils import design_model
 from app.DeepLearning.Baseline.DeepModel import Model

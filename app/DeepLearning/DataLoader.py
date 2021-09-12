@@ -1,9 +1,9 @@
-from .utils import load_dataloader
+from .utils import load_data_loader
 import os
 import numpy as np
 
 
-class DataLoader():
+class DataLoader:
     def __init__(self, train_path, test_path, train_batch_size=None, test_batch_size=32, torch_mode=True):
         self.train_path = train_path
         self.test_path = test_path
@@ -30,13 +30,12 @@ class DataLoader():
         if x_test is None or len(x_test) == 0:
             return None
         if self.torch_mode:
-            return load_dataloader(x_test, y_test, self.test_batch_size)
+            return load_data_loader(x_test, y_test, self.test_batch_size)
         return IterLoader(self.test_path, self.test_batch_size)
 
     def load_data_loader(self):
         x_train, y_train = read_file(self.train_path)
-        # self.sample_data = next(iter(load_dataloader(x_train[0], y_train[0], batch_size=1)))
-        self.train_loader = load_dataloader(x_train, y_train, self.train_batch_size)
+        self.train_loader = load_data_loader(x_train, y_train, self.train_batch_size)
         self.train_loader_for_test = self.train_loader
 
 
@@ -75,13 +74,13 @@ class IterLoader:
             x, y = self.batches[self.n]
         except:
             raise StopIteration()
-        dl = load_dataloader(x, y, len(x))
+        dl = load_data_loader(x, y, len(x))
         self.n += 1
         return next(iter(dl))
 
     def get_sample_data(self):
         x, y = self.batches[0]
-        dl = load_dataloader(x, y, 1)
+        dl = load_data_loader(x, y, 1)
         return next(iter(dl))
 
     def load(self):
@@ -89,9 +88,9 @@ class IterLoader:
         n_samples = len(samples)
         n_batches = n_samples // self.batch_size
 
-        samples_indeces = np.arange(n_samples)
-        np.random.shuffle(samples_indeces)
-        batches_idx = np.split(samples_indeces[:self.batch_size * n_batches], n_batches)
+        samples_indices = np.arange(n_samples)
+        np.random.shuffle(samples_indices)
+        batches_idx = np.split(samples_indices[:self.batch_size * n_batches], n_batches)
         self.batches = []
         for batch_ind in batches_idx:
             x_batch = samples[batch_ind]

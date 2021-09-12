@@ -47,7 +47,7 @@ class Model:
     set_weights(w)
         invokes the set_weights method of CNN or MLP class
     predict(dl)
-        Predict labels of samples in the dataloader
+        Predict labels of samples in the data loader
 
     """
 
@@ -78,9 +78,6 @@ class Model:
         self.model.to(device=self.device)
         self.loss_func = getattr(nn, loss_func)(**loss_param).to(device=self.device)
         self.optimizer = getattr(optim, opt_func)(self.model.parameters(), **opt_param)
-
-
-
 
     def evaluate(self, dl):
         """ evaluate the network's performances in terms of loss and accuracy
@@ -204,9 +201,10 @@ class Model:
 
         Parameters
         ----------
-        train_loader
-        validation
-        verbose
+        train_loader:  DataLoader
+            Custom data loader
+        n_batches: int
+        verbose: bool
 
         Returns
         -------
@@ -255,9 +253,13 @@ class Model:
     def get_optimizer_params(self):
         return self.optimizer.state_dict()
 
+
 class AverageMeter(object):
     def __init__(self):
-        self.reset()
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
 
     def reset(self):
         self.val = 0

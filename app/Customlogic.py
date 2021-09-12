@@ -89,7 +89,7 @@ class CustomLogic(AppLogic):
     def local_computation(self):
         """  should be overridden.
             called for clients to update their models
-            based on recieved aggregated parameters.
+            based on received aggregated parameters.
 
         """
         self.send_to_server(self.parameters)
@@ -122,7 +122,6 @@ class CustomLogic(AppLogic):
         else:
             print(f'{bcolors.WARNING} the workflow is not finished for all splits. {bcolors.ENDC}')
             self.current_state = "Local Update"
-
 
     def write_results(self):
         if self.coordinator:
