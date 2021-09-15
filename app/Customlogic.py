@@ -17,8 +17,6 @@
 
 """
 from .logic import AppLogic, bcolors
-import bios
-import os
 
 
 class CustomLogic(AppLogic):

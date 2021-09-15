@@ -16,7 +16,6 @@
     limitations under the License.
 
 """
-from app.DeepLearning.Baseline.DeepModel import Model
 
 
 class ClientModels:
@@ -52,9 +51,9 @@ class ClientModels:
         """
         Parameters
         ----------
-        base: dict
-            containing arguments for the base DeepModel class
-            and also specific arguments for ClientModels.
+        model:
+        train_all:
+        batch_count:
         """
         self.model = model
         self.train_all = train_all

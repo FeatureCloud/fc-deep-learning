@@ -26,8 +26,6 @@ class Model:
     """ Deep Convolutional Network
     Attributes
     ----------
-    batch_size : int
-    epochs : int
     loss_func : torch.nn.modules.loss.CrossEntropyLoss
     device : str
         device name to pass the model parameters to.
@@ -69,7 +67,9 @@ class Model:
         loss_func = loss['name']
         loss_param = loss['param'] if 'param' in loss else {}
 
-        # Get attributes: learning_rate, batch_size, epochs
+        # Set attributes for Model:
+        # batch_size
+        # epochs
         for k, v in attributes.items():
             setattr(self, k, v)
         # self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
