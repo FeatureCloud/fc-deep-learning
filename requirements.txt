@@ -1,10 +1,4 @@
-bottle
-numpy
+featurecloud
 scipy
 scikit-learn
-matplotlib
-seaborn
-jsonpickle
-joblib
 bios
-pandas
