@@ -220,7 +220,7 @@ featurecloud app build featurecloud.ai/fc_deep_networks
 
 Please provide example data so others can run the deep learning app with the desired settings in the `config.yml` file.
 
-#### Run YOUR_APPLICATION in the test-bed
+#### Run the deep learning app in the test-bed
 
 You can run the deep learning app as a standalone app in the [FeatureCloud test-bed](https://featurecloud.ai/development/test) or [FeatureCloud Workflow](https://featurecloud.ai/projects). You can also run the app using CLI:
 
