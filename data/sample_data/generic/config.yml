@@ -1,0 +1,42 @@
+fc_deep:
+  local_dataset:
+    train: "train.npz"
+    test: "test.npz"
+    central_test: None
+
+
+  logic:
+    mode: "directory"
+    dir: "data"
+
+
+  result:
+    pred: "y_pred.csv"
+    target: "y_test.csv"
+
+
+  fed_hyper_params:
+    max_iter: 10
+    n_classes: 10
+    federated_model: 'FedAVG'
+    batch_count: 1
+
+
+
+  train_config:
+    torch_loader: True # True: using torchvision Dataloader, False using custom Dataloader
+    batch_size: 32
+    test_batch_size: 32
+    epochs: 1
+    optimizer:
+      name: 'SGD'
+      param:
+        lr: 0.1
+    loss:
+      name: 'CrossEntropyLoss'
+
+
+  model: # 'cnn' or 'cnn.py' or layers_dict
+    name: 'cnn.py'
+    n_classes: 10
+    in_features: 1
