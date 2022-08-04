@@ -1,13 +1,13 @@
 from bottle import Bottle
-
-from app.api_ctrl import api_server
-from app.api_web import web_server
+from FeatureCloud.app.api.http_ctrl import api_server
+from FeatureCloud.app.api.http_web import web_server
+from FeatureCloud.app.engine.app import app
+import app as temp_app
 
 server = Bottle()
 
-
 if __name__ == '__main__':
-    print('Starting app', flush=True)
+    app.register()
     server.mount('/api', api_server)
     server.mount('/web', web_server)
     server.run(host='localhost', port=5000)
