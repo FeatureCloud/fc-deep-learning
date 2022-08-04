@@ -22,27 +22,9 @@ import numpy as np
 from torch.utils.data import DataLoader, Dataset
 from PIL import Image
 import torch.nn as nn
-
-
-def get_base_model_config(stats, hyper_parameters):
-    """
-
-    Parameters
-    ----------
-    stats: dict
-    hyper_parameters: dict
-
-    Returns
-    -------
-    config: dict
-    """
-    # if hyper_parameters['model'] == "CNN":
-    if True:
-        config = {"n_channels": stats['n_channels'],
-                  "img_width": stats['width'],
-                  "n_classes": hyper_parameters["n_classes"],
-                  }
-    return config
+from models.pytorch import models
+import importlib.util
+import sys
 
 
 def load_data_loader(x, y, batch_size):
@@ -60,15 +42,43 @@ def load_data_loader(x, y, batch_size):
     -------
     data_loader
     """
+    if x.ndim > 3:
+        mean = [np.mean(x[:, :, :, ch]) for ch in range(x.shape[-1])]
+        std = [np.std(x[:, :, :, ch]) for ch in range(x.shape[-1])]
+    else:
+        mean, std = [x.mean()], [x.std()]
     transform = transforms.Compose([
         transforms.ToTensor(),
+        transforms.Normalize(mean, std)
     ])
     dataset = FromNumpyDataset(x, y, transform)
     data_loader = DataLoader(dataset, batch_size, shuffle=True, num_workers=1)
     return data_loader
 
 
+def check_dims(data):
+    data = np.array(list(data)).squeeze()
+    print(f"Input data dimension: {data.ndim}, Shape: {data.shape}")
+    if data.shape[-1] > 3:  # channel first
+        data = np.moveaxis(data, -1, 1)
+    return data
+
+
 def design_model(config, sample):
+    if 'name' in config:
+        name = config.pop('name')
+        if hasattr(models, name.upper()):
+            return lambda: getattr(models, name.upper())(**config), {}
+        elif '.py' in name:
+            model_name = f"{name.split('.')[0]}.Model"
+            spec = importlib.util.spec_from_file_location(model_name, f"/mnt/input/{name}")
+            foo = importlib.util.module_from_spec(spec)
+            sys.modules["module.name"] = foo
+            spec.loader.exec_module(foo)
+            return lambda: foo.Model(**config), {}
+        else:
+            return None, {}
+
     ds = load_data_loader(sample[0], sample[1], batch_size=1)
     sample_data = next(iter(ds))[0]
     del ds
@@ -120,26 +130,6 @@ def get_param_value_from_data(raw_params, sample, *args):
             if raw_params['in_channels'] == 'None':
                 raw_params['in_channels'] = sample.size(1)
     return raw_params
-
-
-def num_flat_features(x):
-    """ calculating the size of x for all dimensions
-        except the first one (batch).
-
-    Parameters
-    ----------
-    x : torch.Tensor
-
-    Returns
-    -------
-    num_features : int
-        number of elements of x(except first dim.)
-    """
-    size = x.size()[1:]  #
-    num_features = 1
-    for s in size:
-        num_features *= s
-    return num_features
 
 
 class FromNumpyDataset(Dataset):
