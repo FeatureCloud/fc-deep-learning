@@ -4,6 +4,7 @@
 Practitioners and researchers can use the FeatureCloud Deep Learning app to run different deep neural networks
 in a federated fashion inside the FeatureCloud platform. The Deep learning app is implemented using the PyTorch library. It supports other architectural and training elements to provide FeatureCloud users with enough flexibility to experiment with diverse architecture while shying away from making 
 the app more complicated.
+![states diagram](data/images/state_diagram.png)
 
 ## Architecture
 One of the significant advantages of Deep Neural networks is the universality of the models to be applied 
