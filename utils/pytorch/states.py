@@ -1,5 +1,7 @@
+from abc import ABC
+
 import numpy as np
-from FeatureCloud.app.engine.app import app_state, AppState, Role, LogLevel
+from FeatureCloud.app.engine.app import AppState, LogLevel
 from FeatureCloud.app.engine.app import State as op_state
 from CustomStates import ConfigState
 from utils.pytorch.DataLoader import DataLoader
@@ -9,19 +11,17 @@ from utils.pytorch.ClientModels import ClientModels
 from itertools import compress
 import pandas as pd
 from copy import deepcopy
-name = 'fc_deep'
+import torch
+
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-@app_state(name='initial', role=Role.BOTH, app_name=name)
-class Initialization(ConfigState.State):
+class Initialization(ConfigState.State, ABC):
     """
     Read input data
     read config files
 
     """
-
-    def register(self):
-        self.register_transition('Local_Update')
 
     def run(self) -> str or None:
         self.update(state=op_state.RUNNING)
@@ -35,7 +35,6 @@ class Initialization(ConfigState.State):
             # data_to_send = [self.load('client_model').get_weights(), self.load('client_model').get_optimizer_params()]
             data_to_send = [self.load('client_model').get_weights()]
             self.broadcast_data(data=data_to_send, send_to_self=False)
-        return 'Local_Update'
 
     def read_input(self):
         data_loaders = []
@@ -82,18 +81,12 @@ class Initialization(ConfigState.State):
         self.store('test_loader', dl)
 
 
-@app_state('Local_Update', Role.BOTH)
-class LocalUpdate(AppState):
+class LocalUpdate(AppState, ABC):
     """ Local Model training
         Input:
             Model weights(Coordinator already has it)
             App statuses: {Converged: True/False }
     """
-
-    def register(self):
-        self.register_transition('Global_Aggregation', Role.COORDINATOR)
-        self.register_transition('Local_Update', Role.PARTICIPANT)
-        self.register_transition('Write_Results', Role.PARTICIPANT)
 
     def run(self) -> str or None:
         client_model = self.load('client_model')
@@ -103,15 +96,12 @@ class LocalUpdate(AppState):
         weights, converged = self.get_global_parameters(client_model, n_splits=len(data_loaders))
 
         if all(converged):
-            return 'Write_Results'
+            return 'Converged'
 
         weights, state_dict, data_loaders = \
             self.remove_converged_models(weights, state_dict, data_loaders, converged)
         data_to_send = self.local_computation(client_model, data_loaders, weights, state_dict)
         self.send_data_to_coordinator(data_to_send)
-        if self.is_coordinator:
-            return 'Global_Aggregation'
-        return 'Local_Update'
 
     def get_global_parameters(self, client_model, n_splits):
         """
@@ -164,12 +154,7 @@ class LocalUpdate(AppState):
         return list(zip(new_parameters, trained_samples))
 
 
-@app_state('Global_Aggregation', Role.COORDINATOR)
-class GlobalAggregation(AppState):
-    def register(self):
-        self.register_transition('Local_Update', Role.COORDINATOR)
-        self.register_transition('Write_Results', Role.COORDINATOR)
-
+class GlobalAggregation(AppState, ABC):
     def run(self) -> str or None:
         self.update(message=f"#{self.load('iteration')}: Waiting for others")
         received_params = self.gather_data()
@@ -178,8 +163,7 @@ class GlobalAggregation(AppState):
         data_to_send = [global_weights, stopping_criteria]
         self.broadcast_data(data_to_send, send_to_self=False)
         if all(stopping_criteria):
-            return 'Write_Results'
-        return 'Local_Update'
+            return "Converged"
 
     def global_aggregation(self, params):
         client_model = self.load('client_model')
@@ -223,11 +207,7 @@ class GlobalAggregation(AppState):
         return stopping_criteria
 
 
-@app_state('Write_Results', Role.BOTH)
-class WriteResults(AppState):
-    def register(self):
-        self.register_transition('terminal')
-
+class WriteResults(AppState, ABC):
     def run(self) -> str or None:
         self.update(message=f"Writing Results")
         client_model = self.load('client_model')
@@ -235,14 +215,15 @@ class WriteResults(AppState):
             if self.load('test_loader') is not None:
                 self.log(f"Writing the results for centralized test")
                 y_pred, y_true = client_model.predict(self.load('test_loader'))
-                pd.DataFrame(y_pred, columns=['y_pred']).to_csv(self.load('output_files')['central_pred'][0], index=None)
-                pd.DataFrame(y_true, columns=['y_true']).to_csv(self.load('output_files')['central_target'][0], index=None)
+                pd.DataFrame(y_pred, columns=['y_pred']).to_csv(self.load('output_files')['central_pred'][0],
+                                                                index=None)
+                pd.DataFrame(y_true, columns=['y_true']).to_csv(self.load('output_files')['central_target'][0],
+                                                                index=None)
         for counter, dl in enumerate(self.load('data_loaders')):
             if dl.test_loader is not None:
                 self.log(f"Writing the results for of local test-set #{counter}")
                 y_pred, y_true = client_model.predict(dl.test_loader)
                 pd.DataFrame(y_pred, columns=['y_pred']).to_csv(self.load('output_files')['pred'][counter], index=None)
-                pd.DataFrame(y_true, columns=['y_true']).to_csv(self.load('output_files')['target'][counter], index=None)
+                pd.DataFrame(y_true, columns=['y_true']).to_csv(self.load('output_files')['target'][counter],
+                                                                index=None)
         self.update(message="Finished!")
-        return 'terminal'
-
