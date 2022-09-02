@@ -15,7 +15,6 @@ import torch
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
 class Initialization(ConfigState.State, ABC):
     """
     Read input data
@@ -30,13 +29,14 @@ class Initialization(ConfigState.State, ABC):
         self.lazy_init()
         self.finalize_config()
         self.store('iteration', 0)
-        self.read_input()
+        device = torch.device('cuda' if torch.cuda.is_available() and self.config['gpu'] else 'cpu')
+        self.read_input(device)
         if self.is_coordinator:
             # data_to_send = [self.load('client_model').get_weights(), self.load('client_model').get_optimizer_params()]
             data_to_send = [self.load('client_model').get_weights()]
             self.broadcast_data(data=data_to_send, send_to_self=False)
 
-    def read_input(self):
+    def read_input(self, device):
         data_loaders = []
 
         model = None
@@ -50,7 +50,7 @@ class Initialization(ConfigState.State, ABC):
                                                data_loaders[-1].sample_data)
             train_all = self.config["fed_hyper_params"]["federated_model"].strip().lower() == "fedavg"
             if model is None:
-                model = Model(model_class, config, self.config['train_config'])
+                model = Model(model_class, config, self.config['train_config'], device)
             data_loaders[-1].lazy_init(model.batch_size,
                                        model.test_batch_size,
                                        self.config['train_config']['torch_loader']

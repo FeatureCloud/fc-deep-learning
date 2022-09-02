@@ -14,7 +14,7 @@ fc_deep:
     mode: "directory"
     dir: "data"
 
-
+  gpu: True # True or False
   result:
     pred: "y_pred.csv"
     target: "y_test.csv"

@@ -49,7 +49,7 @@ class Model:
 
     """
 
-    def __init__(self, model, config, attributes):
+    def __init__(self, model, config, attributes, device):
         """
 
         Parameters
@@ -72,8 +72,7 @@ class Model:
         # epochs
         for k, v in attributes.items():
             setattr(self, k, v)
-        # self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.device = torch.device('cpu')
+        self.device = device
         self.model = model(**config)
         self.model.to(device=self.device)
         self.loss_func = getattr(nn, loss_func)(**loss_param).to(device=self.device)
