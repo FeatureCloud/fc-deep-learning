@@ -29,7 +29,7 @@ fc_deep:
 
 
   train_config:
-    torch_loader: False # True: using torchvision Dataloader, False using custom Dataloader
+    data_loader: ImageLoader # True: using torchvision Dataloader, False using custom Dataloader
     batch_size: 32
     test_batch_size: 32
     epochs: 1
