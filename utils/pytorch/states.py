@@ -4,7 +4,7 @@ import numpy as np
 from FeatureCloud.app.engine.app import AppState, LogLevel
 from FeatureCloud.app.engine.app import State as op_state
 from CustomStates import ConfigState
-from utils.pytorch.DataLoader import DataLoader
+from utils.pytorch.ImageLoader import ImageLoader
 from utils.utils import design_model
 from utils.pytorch.DeepModel import Model
 from utils.pytorch.ClientModels import ClientModels
@@ -15,6 +15,7 @@ import torch
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+
 class Initialization(ConfigState.State, ABC):
     """
     Read input data
@@ -23,6 +24,7 @@ class Initialization(ConfigState.State, ABC):
     """
 
     def run(self) -> str or None:
+
         self.update(state=op_state.RUNNING)
         self.update(message="Reading the config file....")
         self.read_config()
@@ -37,24 +39,20 @@ class Initialization(ConfigState.State, ABC):
             self.broadcast_data(data=data_to_send, send_to_self=False)
 
     def read_input(self, device):
-        data_loaders = []
+        train_loaders, test_loaders = [], []
 
-        model = None
-        client_model = None
+        model, client_model = None, None
         if self.load('input_files')['test'] is None and self.load('input_files')['central_test'] is None:
             self.log("There is no test data provided", LogLevel.ERROR)
-
-        for train, test in zip(self.load('input_files')['train'], self.load('input_files')['test']):
-            data_loaders.append(DataLoader(train, test))
-            model_class, config = design_model(deepcopy(self.config['model']),
-                                               data_loaders[-1].sample_data)
+        dl = ImageLoader(self.load('input_files')['train'])
+        sample_data = dl.sample_data
+        for train_path, test_path in zip(self.load('input_files')['train'], self.load('input_files')['test']):
+            model_class, config = design_model(deepcopy(self.config['model']), sample_data)
             train_all = self.config["fed_hyper_params"]["federated_model"].strip().lower() == "fedavg"
             if model is None:
                 model = Model(model_class, config, self.config['train_config'], device)
-            data_loaders[-1].lazy_init(model.batch_size,
-                                       model.test_batch_size,
-                                       self.config['train_config']['torch_loader']
-                                       )
+            train_loaders.append(dl.load(train_path, model.batch_size))
+            test_loaders.append(dl.load(test_path, model.test_batch_size))
             if client_model is None:
                 client_model = ClientModels(model, train_all, self.config["fed_hyper_params"]["batch_count"])
                 # if self.coordinator:
@@ -67,18 +65,16 @@ class Initialization(ConfigState.State, ABC):
         if self.is_coordinator:
             self.load_central_testset(model)
         self.store("fed_hyper_params", self.config["fed_hyper_params"])
-        self.store("state_dict", [client_model.get_optimizer_params()] * len(data_loaders))
+        self.store('n_splits', len(train_loaders))
+        self.store("state_dict", [client_model.get_optimizer_params()] * self.load('n_splits'))
         self.store('client_model', client_model)
-        self.store('data_loaders', data_loaders)
+        self.store('train_loaders', train_loaders)
+        self.store('test_loaders', test_loaders)
 
     def load_central_testset(self, model):
-        dl = DataLoader(train_path=None, test_path=self.load('input_files')['central_test'][0])
-        dl.lazy_init(train_batch_size=None,
-                     test_batch_size=model.test_batch_size,
-                     torch_mode=self.config['train_config']['torch_loader']
-                     )
-        dl = dl.test_loader
-        self.store('test_loader', dl)
+        dl = ImageLoader(path=self.load('input_files')['central_test'][0])
+        dl.load(model.test_batch_size)
+        self.store('test_loader', dl.loader)
 
 
 class LocalUpdate(AppState, ABC):
@@ -90,17 +86,18 @@ class LocalUpdate(AppState, ABC):
 
     def run(self) -> str or None:
         client_model = self.load('client_model')
-        data_loaders = self.load('data_loaders')
+        train_loaders = self.load('train_loaders')
+        test_loaders = self.load('test_loaders')
         state_dict = self.load('state_dict')
         self.update(message=f"#{self.load('iteration') + 1}: Waiting for Coordinator")
-        weights, converged = self.get_global_parameters(client_model, n_splits=len(data_loaders))
+        weights, converged = self.get_global_parameters(client_model, n_splits=self.load('n_splits'))
 
         if all(converged):
             return 'Converged'
 
-        weights, state_dict, data_loaders = \
-            self.remove_converged_models(weights, state_dict, data_loaders, converged)
-        data_to_send = self.local_computation(client_model, data_loaders, weights, state_dict)
+        weights, state_dict, train_loaders, test_loaders = \
+            self.remove_converged_models(weights, state_dict, train_loaders, test_loaders, converged)
+        data_to_send = self.local_computation(client_model, train_loaders, test_loaders, weights, state_dict)
         self.send_data_to_coordinator(data_to_send)
 
     def get_global_parameters(self, client_model, n_splits):
@@ -130,23 +127,24 @@ class LocalUpdate(AppState, ABC):
         weights, converged = self.await_data(unwrap=True)
         return weights, converged
 
-    def remove_converged_models(self, weights, state_dict, data_loaders, converged):
+    def remove_converged_models(self, weights, state_dict, train_loaders, test_loaders, converged):
         if any(converged):
             weights = list(compress(weights, converged))
             state_dict = list(compress(state_dict, converged))
-            data_loaders = list(compress(data_loaders, converged))
-        return weights, state_dict, data_loaders
+            train_loaders = list(compress(train_loaders, converged))
+            test_loaders = list(compress(test_loaders, converged))
+        return weights, state_dict, train_loaders, test_loaders
 
-    def local_computation(self, client_model, data_loaders, weights, state_dicts):
+    def local_computation(self, client_model, train_loaders, test_loaders, weights, state_dicts):
         self.store('iteration', self.load('iteration') + 1)
         self.update(message=f"#{self.load('iteration')}: Local Training")
         new_parameters, new_state_dicts, trained_samples = [], [], []
-        for counter, (dl, w, sd) in enumerate(zip(data_loaders, weights, state_dicts)):
+        for counter, (tr_dl, test_dl, w, sd) in enumerate(zip(train_loaders, test_loaders, weights, state_dicts)):
             self.log(f"Iteration {self.load('iteration')}: Update model #{counter}")
             self.log(np.shape(w))
-            client_model.update(dl.train_loader, w, sd, verbose=True)
-            if dl.test_loader is not None:
-                client_model.evaluate(dl.test_loader)
+            client_model.update(tr_dl.loader, w, sd, verbose=True)
+            if test_dl is not None:
+                client_model.evaluate(test_dl.loader)
             new_parameters.append(client_model.get_weights())
             trained_samples.append(client_model.num_trained_samples)
             new_state_dicts.append(client_model.get_optimizer_params())
@@ -176,9 +174,8 @@ class GlobalAggregation(AppState, ABC):
         return global_weights, stopping_criteria
 
     def average_weights(self, params, client_model):
-        n_splits = len(self.load('data_loaders'))
-        global_weights = [np.array(client_model.get_weights(), dtype='object') * 0] * n_splits
-        total_n_samples = [0] * n_splits
+        global_weights = [np.array(client_model.get_weights(), dtype='object') * 0] * self.load('n_splits')
+        total_n_samples = [0] * self.load('n_splits')
         for client_models in params:
             for model_counter, (weights, n_samples) in enumerate(client_models):
                 global_weights[model_counter] += np.array(weights, dtype='object') * n_samples
@@ -219,10 +216,10 @@ class WriteResults(AppState, ABC):
                                                                 index=None)
                 pd.DataFrame(y_true, columns=['y_true']).to_csv(self.load('output_files')['central_target'][0],
                                                                 index=None)
-        for counter, dl in enumerate(self.load('data_loaders')):
-            if dl.test_loader is not None:
+        for counter, dl in enumerate(self.load('test_loaders')):
+            if dl is not None:
                 self.log(f"Writing the results for of local test-set #{counter}")
-                y_pred, y_true = client_model.predict(dl.test_loader)
+                y_pred, y_true = client_model.predict(dl.loader)
                 pd.DataFrame(y_pred, columns=['y_pred']).to_csv(self.load('output_files')['pred'][counter], index=None)
                 pd.DataFrame(y_true, columns=['y_true']).to_csv(self.load('output_files')['target'][counter],
                                                                 index=None)
