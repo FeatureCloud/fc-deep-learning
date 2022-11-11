@@ -8,7 +8,7 @@ from sqlalchemy.sql.functions import user
 from CustomStates import ConfigState
 from utils.pytorch.DataLoader import ImageLoader
 from utils.pytorch import DataLoader
-from utils.utils import design_model, load_module
+from utils.utils import design_model, load_module, to_list, to_numpy
 from utils.pytorch.DeepModel import Model
 from utils.pytorch.ClientModels import ClientModels
 from itertools import compress
@@ -33,6 +33,7 @@ class Initialization(ConfigState.State, ABC):
         self.read_config()
         self.lazy_init()
         self.finalize_config()
+        self.store('smpc_used', self.config.get('use_smpc', False))
         self.store('iteration', 0)
         device = torch.device('cuda' if torch.cuda.is_available() and self.config['gpu'] else 'cpu')
         self.read_input(device)
@@ -78,6 +79,7 @@ class Initialization(ConfigState.State, ABC):
         self.store('train_loaders', train_loaders)
         self.store('test_loaders', test_loaders)
 
+
 class LocalUpdate(AppState, ABC):
     """ Local Model training
         Input:
@@ -99,8 +101,13 @@ class LocalUpdate(AppState, ABC):
         weights, state_dict, train_loaders, test_loaders = \
             self.remove_converged_models(weights, state_dict, train_loaders, test_loaders, converged)
         data_to_send = self.local_computation(client_model, train_loaders, test_loaders, weights, state_dict)
-        self.send_data_to_coordinator(data_to_send)
-        # self.send_data_to_coordinator(data_to_send, use_smpc=self.load('config')["use_smpc"])
+        self.send_data_for_aggregation(data_to_send)
+
+    def send_data_for_aggregation(self, data):
+        data_to_send = data
+        if self.load('smpc_used'):
+            data_to_send = to_list([[np.array(d, dtype='object') * w, w] for d, w in data])
+        self.send_data_to_coordinator(data_to_send, use_smpc=self.load('smpc_used'))
 
     def get_global_parameters(self, client_model, n_splits):
         """
@@ -143,7 +150,7 @@ class LocalUpdate(AppState, ABC):
         new_parameters, new_state_dicts, trained_samples = [], [], []
         for counter, (tr_dl, test_dl, w, sd) in enumerate(zip(train_loaders, test_loaders, weights, state_dicts)):
             self.log(f"Iteration {self.load('iteration')}: Update model #{counter}")
-            self.log(np.shape(w))
+
             client_model.update(tr_dl, w, sd, verbose=True)
             if test_dl is not None:
                 client_model.evaluate(test_dl)
@@ -157,8 +164,7 @@ class LocalUpdate(AppState, ABC):
 class GlobalAggregation(AppState, ABC):
     def run(self) -> str or None:
         self.update(message=f"#{self.load('iteration')}: Waiting for others")
-        received_params = self.gather_data()
-        # self.aggregate_data()
+        received_params = self.gather_local_models()
         self.update(message=f"#{self.load('iteration')}: Aggregation")
         global_weights, stopping_criteria = self.global_aggregation(received_params)
         data_to_send = [global_weights, stopping_criteria]
@@ -168,8 +174,10 @@ class GlobalAggregation(AppState, ABC):
 
     def global_aggregation(self, params):
         client_model = self.load('client_model')
-
-        global_weights = self.average_weights(params, client_model)
+        if self.load('smpc_used'):
+            global_weights = [to_numpy(model) / total_n_sample for model, total_n_sample in params]
+        else:
+            global_weights = self.average_weights(params, client_model)
         stopping_criteria = self.test_aggregated_models(global_weights, client_model)
 
         self.store('weights', global_weights)
@@ -205,6 +213,11 @@ class GlobalAggregation(AppState, ABC):
             # TODO: stopping criterion!!!
             stopping_criteria.append(iteration >= max_iter)
         return stopping_criteria
+
+    def gather_local_models(self):
+        if self.load('smpc_used'):
+            return self.await_data(is_json=True)
+        return self.gather_data()
 
 
 class WriteResults(AppState, ABC):

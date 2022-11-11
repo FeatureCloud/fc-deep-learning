@@ -166,3 +166,33 @@ class FromNumpyDataset(Dataset):
 
     def __len__(self):
         return self.features.shape[0]
+
+
+def to_list(np_array):
+    if not isinstance(np_array, (np.ndarray, list)):
+        if isinstance(np_array, np.float32):
+            return np_array.item()
+        return np_array
+    lst_arr = []
+    for item in np_array:
+        if isinstance(np_array, (np.ndarray, list)):
+            non_np = to_list(item)
+        else:
+            non_np = item
+        lst_arr.append(non_np)
+    return lst_arr
+
+
+def to_numpy(lst):
+    if isinstance(lst, list):
+        np_arr = []
+        for item in lst:
+            np_item = item
+            if isinstance(item, list):
+                np_item = to_numpy(item)
+            np_arr.append(np_item)
+        try:
+            return np.array(np_arr, dtype='float32')
+        except:
+            return np.array(np_arr, dtype='object')
+    return lst

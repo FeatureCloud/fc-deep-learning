@@ -26,6 +26,7 @@ fc_deep:
     federated_model: 'FedAVG'
     batch_count: 1
 
+  use_smpc: True
 
 
   train_config:
