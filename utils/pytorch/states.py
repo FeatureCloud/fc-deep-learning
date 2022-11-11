@@ -48,7 +48,6 @@ class Initialization(ConfigState.State, ABC):
             self.log("There is no test data provided", LogLevel.ERROR)
         self.log(f"Getting sample shape from {self.load('input_files')['train'][0]} dataset")
 
-        # dl = ImageLoader(self.load('input_files')['train'][0])
         dl_class = load_module(impl_models=DataLoader,
                                module=self.config['train_config']['data_loader'],
                                sub_module='DataLoader')
@@ -78,10 +77,6 @@ class Initialization(ConfigState.State, ABC):
         self.store('client_model', client_model)
         self.store('train_loaders', train_loaders)
         self.store('test_loaders', test_loaders)
-
-    # def load_central_testset(self, model):
-    #     dl = ImageLoader()
-
 
 class LocalUpdate(AppState, ABC):
     """ Local Model training
