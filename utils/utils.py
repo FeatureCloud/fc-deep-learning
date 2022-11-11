@@ -64,20 +64,23 @@ def check_dims(data):
     return data
 
 
+def load_module(impl_models, module, sub_module):
+    if hasattr(impl_models, module):
+        return getattr(impl_models, module)
+    if '.py' in module:
+        dl = f"{module.split('.')[0]}.{sub_module}"
+        spec = importlib.util.spec_from_file_location(dl, f"/mnt/input/{module}")
+        foo = importlib.util.module_from_spec(spec)
+        sys.modules["module.name"] = foo
+        spec.loader.exec_module(foo)
+        return getattr(foo, sub_module)
+    raise ModuleNotFoundError(f"module {module} neither is found in implemented models nor in `/mnt/input` directory")
+
+
 def design_model(config, sample):
     if 'name' in config:
         name = config.pop('name')
-        if hasattr(models, name.upper()):
-            return lambda: getattr(models, name.upper())(**config), {}
-        elif '.py' in name:
-            model_name = f"{name.split('.')[0]}.Model"
-            spec = importlib.util.spec_from_file_location(model_name, f"/mnt/input/{name}")
-            foo = importlib.util.module_from_spec(spec)
-            sys.modules["module.name"] = foo
-            spec.loader.exec_module(foo)
-            return lambda: foo.Model(**config), {}
-        else:
-            return None, {}
+        return lambda: load_module(models, name, 'Model')(**config), {}
 
     ds = load_data_loader(sample[0], sample[1], batch_size=1)
     sample_data = next(iter(ds))[0]

@@ -3,8 +3,11 @@ from abc import ABC
 import numpy as np
 from FeatureCloud.app.engine.app import AppState, LogLevel
 from FeatureCloud.app.engine.app import State as op_state
+from sqlalchemy.sql.functions import user
+
 from CustomStates import ConfigState
-from utils.pytorch.ImageLoader import ImageLoader
+from utils.pytorch.DataLoader import ImageLoader
+from utils.pytorch import DataLoader
 from utils.utils import design_model
 from utils.pytorch.DeepModel import Model
 from utils.pytorch.ClientModels import ClientModels
@@ -34,7 +37,6 @@ class Initialization(ConfigState.State, ABC):
         device = torch.device('cuda' if torch.cuda.is_available() and self.config['gpu'] else 'cpu')
         self.read_input(device)
         if self.is_coordinator:
-            # data_to_send = [self.load('client_model').get_weights(), self.load('client_model').get_optimizer_params()]
             data_to_send = [self.load('client_model').get_weights()]
             self.broadcast_data(data=data_to_send, send_to_self=False)
 
@@ -44,7 +46,9 @@ class Initialization(ConfigState.State, ABC):
         model, client_model = None, None
         if self.load('input_files')['test'] is None and self.load('input_files')['central_test'] is None:
             self.log("There is no test data provided", LogLevel.ERROR)
-        dl = ImageLoader(self.load('input_files')['train'])
+        self.log(f"Getting sample shape from {self.load('input_files')['train'][0]} dataset")
+
+        dl = ImageLoader(self.load('input_files')['train'][0])
         sample_data = dl.sample_data
         for train_path, test_path in zip(self.load('input_files')['train'], self.load('input_files')['test']):
             model_class, config = design_model(deepcopy(self.config['model']), sample_data)
@@ -72,8 +76,8 @@ class Initialization(ConfigState.State, ABC):
         self.store('test_loaders', test_loaders)
 
     def load_central_testset(self, model):
-        dl = ImageLoader(path=self.load('input_files')['central_test'][0])
-        dl.load(model.test_batch_size)
+        dl = ImageLoader()
+        dl.load(self.load('input_files')['central_test'][0], model.test_batch_size)
         self.store('test_loader', dl.loader)
 
 
@@ -99,6 +103,7 @@ class LocalUpdate(AppState, ABC):
             self.remove_converged_models(weights, state_dict, train_loaders, test_loaders, converged)
         data_to_send = self.local_computation(client_model, train_loaders, test_loaders, weights, state_dict)
         self.send_data_to_coordinator(data_to_send)
+        # self.send_data_to_coordinator(data_to_send, use_smpc=self.load('config')["use_smpc"])
 
     def get_global_parameters(self, client_model, n_splits):
         """
@@ -142,9 +147,9 @@ class LocalUpdate(AppState, ABC):
         for counter, (tr_dl, test_dl, w, sd) in enumerate(zip(train_loaders, test_loaders, weights, state_dicts)):
             self.log(f"Iteration {self.load('iteration')}: Update model #{counter}")
             self.log(np.shape(w))
-            client_model.update(tr_dl.loader, w, sd, verbose=True)
+            client_model.update(tr_dl, w, sd, verbose=True)
             if test_dl is not None:
-                client_model.evaluate(test_dl.loader)
+                client_model.evaluate(test_dl)
             new_parameters.append(client_model.get_weights())
             trained_samples.append(client_model.num_trained_samples)
             new_state_dicts.append(client_model.get_optimizer_params())
@@ -156,6 +161,7 @@ class GlobalAggregation(AppState, ABC):
     def run(self) -> str or None:
         self.update(message=f"#{self.load('iteration')}: Waiting for others")
         received_params = self.gather_data()
+        # self.aggregate_data()
         self.update(message=f"#{self.load('iteration')}: Aggregation")
         global_weights, stopping_criteria = self.global_aggregation(received_params)
         data_to_send = [global_weights, stopping_criteria]
@@ -219,7 +225,7 @@ class WriteResults(AppState, ABC):
         for counter, dl in enumerate(self.load('test_loaders')):
             if dl is not None:
                 self.log(f"Writing the results for of local test-set #{counter}")
-                y_pred, y_true = client_model.predict(dl.loader)
+                y_pred, y_true = client_model.predict(dl)
                 pd.DataFrame(y_pred, columns=['y_pred']).to_csv(self.load('output_files')['pred'][counter], index=None)
                 pd.DataFrame(y_true, columns=['y_true']).to_csv(self.load('output_files')['target'][counter],
                                                                 index=None)
