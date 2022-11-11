@@ -63,7 +63,7 @@ class ImageLoader:
         data = read_file(path)
         if data is not None:
             x_train, y_train = data
-            self.loader = load_data_loader(x_train, y_train, batch_size)
+            return load_data_loader(x_train, y_train, batch_size)
 
 
 # class ImageLoader(DataReader):
@@ -104,52 +104,52 @@ class ImageLoader:
 #             self.test_loader = load_data_loader(x_test, y_test, self.test_batch_size)
 
 
-class IterLoader(DataReader):
-    def __init__(self, path, batch_size):
-        super().__init__(path.strip().split(".")[-1].strip())
-        self.path = path
-        self.batch_size = batch_size
-        self.batches = None
-        self.max = 0
-        self.n = 0
-        x, y = self.read_file(self.path)
-        n_samples = len(x)
-        self.len = n_samples - (n_samples % self.batch_size)
-
-    def __iter__(self):
-        self.load()
-        return self
-
-    def __next__(self):
-        try:
-            x, y = self.batches[self.n]
-        except:
-            raise StopIteration()
-        dl = load_data_loader(x, y, len(x))
-        self.n += 1
-        return next(iter(dl))
-
-    def get_sample_data(self):
-        x, y = self.batches[0]
-        dl = load_data_loader(x, y, 1)
-        return next(iter(dl))
-
-    def load(self):
-        samples, labels = self.read_file(self.path)
-        n_samples = len(samples)
-        n_batches = n_samples // self.batch_size
-
-        samples_indices = np.arange(n_samples)
-        np.random.shuffle(samples_indices)
-        batches_idx = np.split(samples_indices[:self.batch_size * n_batches], n_batches)
-        self.batches = []
-        for batch_ind in batches_idx:
-            x_batch = samples[batch_ind]
-            y_batch = labels[batch_ind]
-            self.batches.append([x_batch, y_batch])
-        self.max = len(self.batches)
-        self.n = 0
-        self.len = self.max * self.batch_size
-
-    def __len__(self):
-        return self.len
+# class IterLoader(DataReader):
+#     def __init__(self, path, batch_size):
+#         super().__init__(path.strip().split(".")[-1].strip())
+#         self.path = path
+#         self.batch_size = batch_size
+#         self.batches = None
+#         self.max = 0
+#         self.n = 0
+#         x, y = self.read_file(self.path)
+#         n_samples = len(x)
+#         self.len = n_samples - (n_samples % self.batch_size)
+#
+#     def __iter__(self):
+#         self.load()
+#         return self
+#
+#     def __next__(self):
+#         try:
+#             x, y = self.batches[self.n]
+#         except:
+#             raise StopIteration()
+#         dl = load_data_loader(x, y, len(x))
+#         self.n += 1
+#         return next(iter(dl))
+#
+#     def get_sample_data(self):
+#         x, y = self.batches[0]
+#         dl = load_data_loader(x, y, 1)
+#         return next(iter(dl))
+#
+#     def load(self):
+#         samples, labels = self.read_file(self.path)
+#         n_samples = len(samples)
+#         n_batches = n_samples // self.batch_size
+#
+#         samples_indices = np.arange(n_samples)
+#         np.random.shuffle(samples_indices)
+#         batches_idx = np.split(samples_indices[:self.batch_size * n_batches], n_batches)
+#         self.batches = []
+#         for batch_ind in batches_idx:
+#             x_batch = samples[batch_ind]
+#             y_batch = labels[batch_ind]
+#             self.batches.append([x_batch, y_batch])
+#         self.max = len(self.batches)
+#         self.n = 0
+#         self.len = self.max * self.batch_size
+#
+#     def __len__(self):
+#         return self.len
