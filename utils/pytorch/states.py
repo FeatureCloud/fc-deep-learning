@@ -8,7 +8,7 @@ from sqlalchemy.sql.functions import user
 from CustomStates import ConfigState
 from utils.pytorch.DataLoader import ImageLoader
 from utils.pytorch import DataLoader
-from utils.utils import design_model
+from utils.utils import design_model, load_module
 from utils.pytorch.DeepModel import Model
 from utils.pytorch.ClientModels import ClientModels
 from itertools import compress
@@ -48,7 +48,11 @@ class Initialization(ConfigState.State, ABC):
             self.log("There is no test data provided", LogLevel.ERROR)
         self.log(f"Getting sample shape from {self.load('input_files')['train'][0]} dataset")
 
-        dl = ImageLoader(self.load('input_files')['train'][0])
+        # dl = ImageLoader(self.load('input_files')['train'][0])
+        dl_class = load_module(impl_models=DataLoader,
+                               module=self.config['train_config']['data_loader'],
+                               sub_module='DataLoader')
+        dl = dl_class(path=self.load('input_files')['train'][0])
         sample_data = dl.sample_data
         for train_path, test_path in zip(self.load('input_files')['train'], self.load('input_files')['test']):
             model_class, config = design_model(deepcopy(self.config['model']), sample_data)
@@ -67,7 +71,7 @@ class Initialization(ConfigState.State, ABC):
                 #                                 self.config["fed_hyper_params"]["batch_count"])
 
         if self.is_coordinator:
-            self.load_central_testset(model)
+            self.store('test_loader', dl.load(self.load('input_files')['central_test'][0], model.test_batch_size))
         self.store("fed_hyper_params", self.config["fed_hyper_params"])
         self.store('n_splits', len(train_loaders))
         self.store("state_dict", [client_model.get_optimizer_params()] * self.load('n_splits'))
@@ -75,10 +79,8 @@ class Initialization(ConfigState.State, ABC):
         self.store('train_loaders', train_loaders)
         self.store('test_loaders', test_loaders)
 
-    def load_central_testset(self, model):
-        dl = ImageLoader()
-        dl.load(self.load('input_files')['central_test'][0], model.test_batch_size)
-        self.store('test_loader', dl.loader)
+    # def load_central_testset(self, model):
+    #     dl = ImageLoader()
 
 
 class LocalUpdate(AppState, ABC):

@@ -65,6 +65,21 @@ def check_dims(data):
 
 
 def load_module(impl_models, module, sub_module):
+    """ Loading the class of some module that maybe implemented in models or uploaded by the user
+
+    Parameters
+    ----------
+    impl_models: object
+    module: str
+        name of the module (or.py file including it)
+    sub_module: str
+        name of class inside .py file
+
+    Returns
+    -------
+
+    """
+
     if hasattr(impl_models, module):
         return getattr(impl_models, module)
     if '.py' in module:
