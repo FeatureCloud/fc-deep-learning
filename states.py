@@ -13,14 +13,14 @@ class B1(Initialization):
     """
 
     def register(self):
-        self.register_transition('Local_Update')
+        self.register_transition('Local Update', label="Broadcast initial weights")
 
     def run(self) -> str or None:
         super().run()
-        return 'Local_Update'
+        return 'Local Update'
 
 
-@app_state('Local_Update', Role.BOTH)
+@app_state('Local Update', Role.BOTH)
 class B2(LocalUpdate):
     """ Local Model training
         Input:
@@ -29,37 +29,37 @@ class B2(LocalUpdate):
     """
 
     def register(self):
-        self.register_transition('Global_Aggregation', Role.COORDINATOR)
-        self.register_transition('Local_Update', Role.PARTICIPANT)
-        self.register_transition('Write_Results', Role.PARTICIPANT)
+        self.register_transition('Global Aggregation', Role.COORDINATOR, label="Gather local models")
+        self.register_transition('Local Update', Role.PARTICIPANT, label="Wait for the global model")
+        self.register_transition('Write Results', Role.PARTICIPANT, label="Finalize the execution")
 
     def run(self) -> str or None:
 
         msg = super().run()
         if msg is not None:
-            return 'Write_Results'
+            return 'Write Results'
         if self.is_coordinator:
-            return 'Global_Aggregation'
-        return 'Local_Update'
+            return "Global Aggregation"
+        return 'Local Update'
 
 
-@app_state('Global_Aggregation', Role.COORDINATOR)
+@app_state('Global Aggregation', Role.COORDINATOR)
 class C1(GlobalAggregation):
     def register(self):
-        self.register_transition('Local_Update', Role.COORDINATOR)
-        self.register_transition('Write_Results', Role.COORDINATOR)
+        self.register_transition('Local Update', Role.COORDINATOR, label="Broadcast the global model")
+        self.register_transition('Write Results', Role.COORDINATOR, label="Finalize the execution")
 
     def run(self) -> str or None:
         smg = super().run()
         if smg is not None:
-            return 'Write_Results'
-        return 'Local_Update'
+            return 'Write Results'
+        return 'Local Update'
 
 
-@app_state('Write_Results', Role.BOTH)
+@app_state('Write Results', Role.BOTH)
 class B3(WriteResults):
     def register(self):
-        self.register_transition('terminal')
+        self.register_transition('terminal', label="Terminate the execution")
 
     def run(self) -> str or None:
         super().run()
