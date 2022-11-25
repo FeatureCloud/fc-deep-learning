@@ -9,6 +9,7 @@ fc_deep:
     mode: "directory"
     dir: "data"
 
+  gpu: False
 
   result:
     pred: "y_pred.csv"
@@ -24,7 +25,7 @@ fc_deep:
 
 
   train_config:
-    torch_loader: True # True: using torchvision Dataloader, False using custom Dataloader
+    data_loader: ImageLoader.py
     batch_size: 32
     test_batch_size: 32
     epochs: 1
