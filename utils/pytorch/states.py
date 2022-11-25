@@ -47,11 +47,16 @@ class Initialization(ConfigState.State, ABC):
         model, client_model = None, None
         if self.load('input_files')['test'] is None and self.load('input_files')['central_test'] is None:
             self.log("There is no test data provided", LogLevel.ERROR)
+            self.update(message="no test data", state=op_state.ERROR)
         self.log(f"Getting sample shape from {self.load('input_files')['train'][0]} dataset")
 
         dl_class = load_module(impl_models=DataLoader,
                                module=self.config['train_config']['data_loader'],
                                sub_module='DataLoader')
+        if dl_class is None:
+            self.log(f"module {self.config['train_config']['data_loader']} neither is found in implemented models nor "
+                     f"in `/mnt/input` directory", LogLevel.ERROR)
+            self.update(message="module not found", state=op_state.ERROR)
         dl = dl_class(path=self.load('input_files')['train'][0])
         sample_data = dl.sample_data
         for train_path, test_path in zip(self.load('input_files')['train'], self.load('input_files')['test']):

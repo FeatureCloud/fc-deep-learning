@@ -89,7 +89,7 @@ def load_module(impl_models, module, sub_module):
         sys.modules["module.name"] = foo
         spec.loader.exec_module(foo)
         return getattr(foo, sub_module)
-    raise ModuleNotFoundError(f"module {module} neither is found in implemented models nor in `/mnt/input` directory")
+    return None
 
 
 def design_model(config, sample):
