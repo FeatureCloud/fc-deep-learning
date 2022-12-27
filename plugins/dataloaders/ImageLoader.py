@@ -5,7 +5,7 @@ import torchvision.transforms as transforms
 from PIL import Image
 
 
-class ImageLoader:
+class CustomDataLoader:
     def __init__(self, path=None):
         self.path = path
         self.file_format = None if self.path is None else self.path.strip().split(".")[-1].strip()

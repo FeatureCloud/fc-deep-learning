@@ -5,7 +5,7 @@ fc_deep:
 #    train: "train.npz"
 #    test: "test.npz"
 #    central_test: "mnist.npz"
-    central_test: None
+    central_test: null
 
 
   logic:

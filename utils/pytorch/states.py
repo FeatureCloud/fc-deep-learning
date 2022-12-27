@@ -1,14 +1,9 @@
 from abc import ABC
-
 import numpy as np
 from FeatureCloud.app.engine.app import AppState, LogLevel
 from FeatureCloud.app.engine.app import State as op_state
-from sqlalchemy.sql.functions import user
-
 from CustomStates import ConfigState
-from utils.pytorch.DataLoader import ImageLoader
-from utils.pytorch import DataLoader
-from utils.utils import design_model, load_module, to_list, to_numpy
+from utils.utils import design_model, get_dataloader, to_list, to_numpy
 from utils.pytorch.DeepModel import Model
 from utils.pytorch.ClientModels import ClientModels
 from itertools import compress
@@ -50,39 +45,43 @@ class Initialization(ConfigState.State, ABC):
             self.update(message="no test data", state=op_state.ERROR)
         self.log(f"Getting sample shape from {self.load('input_files')['train'][0]} dataset")
 
-        dl_class = load_module(impl_models=DataLoader,
-                               module=self.config['train_config']['data_loader'],
-                               sub_module='DataLoader')
+        dl_class = get_dataloader(self.config['train_config']['data_loader'])
         if dl_class is None:
             self.log(f"module {self.config['train_config']['data_loader']} neither is found in implemented models nor "
                      f"in `/mnt/input` directory", LogLevel.ERROR)
             self.update(message="module not found", state=op_state.ERROR)
         dl = dl_class(path=self.load('input_files')['train'][0])
-        sample_data = dl.sample_data
-        for train_path, test_path in zip(self.load('input_files')['train'], self.load('input_files')['test']):
-            model_class, config = design_model(deepcopy(self.config['model']), sample_data)
-            train_all = self.config["fed_hyper_params"]["federated_model"].strip().lower() == "fedavg"
-            if model is None:
-                model = Model(model_class, config, self.config['train_config'], device)
-            train_loaders.append(dl.load(train_path, model.batch_size))
-            test_loaders.append(dl.load(test_path, model.test_batch_size))
-            if client_model is None:
-                client_model = ClientModels(model, train_all, self.config["fed_hyper_params"]["batch_count"])
-                # if self.coordinator:
-                #     client_model = ClientModels(model, train_all,
-                #                                 self.config["fed_hyper_params"]["batch_count"])
-                # else:
-                #     client_model = ClientModels(model, train_all,
-                #                                 self.config["fed_hyper_params"]["batch_count"])
+        # dl = dl_class()
+        data_cv_folds = zip(self.load('input_files')['train'], self.load('input_files')['test'])
+        for counter, fold in enumerate(data_cv_folds):
+            train_path, test_path = fold
+            if counter == 0:
+                client_model, batch_size, test_batch_size = self.build_client_model(dl.sample_data_loader, device)
 
-        if self.is_coordinator:
-            self.store('test_loader', dl.load(self.load('input_files')['central_test'][0], model.test_batch_size))
+            train_loaders.append(dl.load(train_path, batch_size))
+            test_loaders.append(dl.load(test_path, test_batch_size))
+
+        if self.is_coordinator and self.config['local_dataset']['central_test'] is not None:
+            self.store('test_loader', dl.load(self.load('input_files')['central_test'][0], test_batch_size))
         self.store("fed_hyper_params", self.config["fed_hyper_params"])
         self.store('n_splits', len(train_loaders))
         self.store("state_dict", [client_model.get_optimizer_params()] * self.load('n_splits'))
         self.store('client_model', client_model)
         self.store('train_loaders', train_loaders)
         self.store('test_loaders', test_loaders)
+
+    def build_client_model(self, data_loader, device):
+        model_class, config = design_model(deepcopy(self.config['model']), data_loader)
+        model = Model(model_class, config, self.config['train_config'], device)
+        train_all = self.config["fed_hyper_params"]["federated_model"].strip().lower() == "fedavg"
+        client_model = ClientModels(model, train_all, self.config["fed_hyper_params"]["batch_count"])
+        # if self.coordinator:
+        #     client_model = ClientModels(model, train_all,
+        #                                 self.config["fed_hyper_params"]["batch_count"])
+        # else:
+        #     client_model = ClientModels(model, train_all,
+        #                                 self.config["fed_hyper_params"]["batch_count"])
+        return client_model, model.batch_size, model.test_batch_size
 
 
 class LocalUpdate(AppState, ABC):
@@ -229,14 +228,11 @@ class WriteResults(AppState, ABC):
     def run(self) -> str or None:
         self.update(message=f"Writing Results")
         client_model = self.load('client_model')
-        if self.is_coordinator:
-            if self.load('test_loader') is not None:
-                self.log(f"Writing the results for centralized test")
-                y_pred, y_true = client_model.predict(self.load('test_loader'))
-                pd.DataFrame(y_pred, columns=['y_pred']).to_csv(self.load('output_files')['central_pred'][0],
-                                                                index=None)
-                pd.DataFrame(y_true, columns=['y_true']).to_csv(self.load('output_files')['central_target'][0],
-                                                                index=None)
+        if self.is_coordinator and self.load('test_loader') is not None:
+            self.log(f"Writing the results for centralized test")
+            y_pred, y_true = client_model.predict(self.load('test_loader'))
+            pd.DataFrame(y_pred, columns=['y_pred']).to_csv(self.load('output_files')['central_test'][0], index=None)
+            pd.DataFrame(y_true, columns=['y_true']).to_csv(self.load('output_files')['central_target'][0], index=None)
         for counter, dl in enumerate(self.load('test_loaders')):
             if dl is not None:
                 self.log(f"Writing the results for of local test-set #{counter}")

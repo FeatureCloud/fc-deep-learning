@@ -16,90 +16,70 @@
     limitations under the License.
 
 """
-import torchvision.transforms as transforms
-import torch
 import numpy as np
-from torch.utils.data import DataLoader, Dataset
-from PIL import Image
 import torch.nn as nn
 from models.pytorch import models
 import importlib.util
 import sys
+from utils.pytorch import DataLoader as SupportedLoaders
 
 
-def load_data_loader(x, y, batch_size):
-    """
+def get_dataloader(name):
+    """ Loading the class of some module that maybe implemented in models or uploaded by the user
+    The Costume DataLoader should be always named `CustomDataLoader`
+    And should have followings:
+        * `sample_data` attribute to get a couple of samples
+        * `load` method which gets the file_path and batch-size and returns the data loader
+
 
     Parameters
     ----------
-    x: numpy.array
-        features
-    y: list
-        labels
-    batch_size: int
+    name: str
+        name of the module (or.py file including it)
 
     Returns
     -------
-    data_loader
+
     """
-    if x.ndim > 3:
-        mean = [np.mean(x[:, :, :, ch]) for ch in range(x.shape[-1])]
-        std = [np.std(x[:, :, :, ch]) for ch in range(x.shape[-1])]
-    else:
-        mean, std = [x.mean()], [x.std()]
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean, std)
-    ])
-    dataset = FromNumpyDataset(x, y, transform)
-    data_loader = DataLoader(dataset, batch_size, shuffle=True, num_workers=1)
-    return data_loader
+    return get_custom_module(module=name, existing=SupportedLoaders, class_name='CustomDataLoader')
 
 
-def check_dims(data):
-    data = np.array(list(data)).squeeze()
-    print(f"Input data dimension: {data.ndim}, Shape: {data.shape}")
-    if data.shape[-1] > 3:  # channel first
-        data = np.moveaxis(data, -1, 1)
-    return data
-
-
-def load_module(impl_models, module, sub_module):
+def get_custom_module(module, existing, class_name=None):
     """ Loading the class of some module that maybe implemented in models or uploaded by the user
-
+        This method supports following custom modules:
+            * DataLoader
+            * model
+            * loss function
+            * optimizer
     Parameters
     ----------
-    impl_models: object
     module: str
         name of the module (or.py file including it)
-    sub_module: str
-        name of class inside .py file
+    existing: python class
+    class_name: str
+        the name of the class that module contains and should be imported
 
     Returns
     -------
 
     """
-
-    if hasattr(impl_models, module):
-        return getattr(impl_models, module)
+    if hasattr(existing, module):
+        return getattr(SupportedLoaders, module)
     if '.py' in module:
-        dl = f"{module.split('.')[0]}.{sub_module}"
+        dl = f"{module.split('.')[0]}.{class_name}"
         spec = importlib.util.spec_from_file_location(dl, f"/mnt/input/{module}")
         foo = importlib.util.module_from_spec(spec)
         sys.modules["module.name"] = foo
         spec.loader.exec_module(foo)
-        return getattr(foo, sub_module)
+        return getattr(foo, class_name)
     return None
 
 
-def design_model(config, sample):
+def design_model(config, data_loader):
     if 'name' in config:
         name = config.pop('name')
-        return lambda: load_module(models, name, 'Model')(**config), {}
-
-    ds = load_data_loader(sample[0], sample[1], batch_size=1)
-    sample_data = next(iter(ds))[0]
-    del ds
+        return lambda: get_custom_module(module=name, existing=models, class_name='Model')(**config), {}
+    sample_data = next(iter(data_loader))[0]
     layer_default = {}
     layers = []
     layer_counter = {}
@@ -148,24 +128,6 @@ def get_param_value_from_data(raw_params, sample, *args):
             if raw_params['in_channels'] == 'None':
                 raw_params['in_channels'] = sample.size(1)
     return raw_params
-
-
-class FromNumpyDataset(Dataset):
-    def __init__(self, x_train, y_train, transform=None):
-        self.features = x_train
-        self.labels = y_train
-        self.transform = transform
-
-    def __getitem__(self, index):
-        np_arr = np.array(self.features[index]).astype(f"float32")
-        y = self.labels[index]
-        img = Image.fromarray(np_arr)
-        if self.transform is not None:
-            img = self.transform(np.array(img))
-        return img, y
-
-    def __len__(self):
-        return self.features.shape[0]
 
 
 def to_list(np_array):
