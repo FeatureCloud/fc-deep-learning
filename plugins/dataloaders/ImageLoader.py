@@ -6,7 +6,7 @@ from PIL import Image
 
 
 class CustomDataLoader:
-    def __init__(self, path=None):
+    def __init__(self, path=None, **kwargs):
         self.path = path
         self.file_format = None if self.path is None else self.path.strip().split(".")[-1].strip()
         self.x, self.y = None, None
