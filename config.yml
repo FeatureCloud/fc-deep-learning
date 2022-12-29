@@ -6,7 +6,7 @@ fc_deep:
 #    test: "test.npz"
 #    central_test: "mnist.npz"
     central_test: null
-#    detail: null
+#    detail: {} ## no detail should be an empty dict.
     detail:
       sep: ','
       label: "Group"
