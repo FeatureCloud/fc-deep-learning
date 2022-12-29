@@ -32,7 +32,7 @@ class Initialization(ConfigState.State, ABC):
         self.store('iteration', 0)
         device = torch.device('cuda' if torch.cuda.is_available() and self.config['gpu'] else 'cpu')
         self.read_input(device)
-        if self.is_coordinator:
+        if self.is_coordinator and len(self.clients) > 1:
             data_to_send = [self.load('client_model').get_weights()]
             self.broadcast_data(data=data_to_send, send_to_self=False)
 
@@ -50,7 +50,7 @@ class Initialization(ConfigState.State, ABC):
             self.log(f"module {self.config['train_config']['data_loader']} neither is found in implemented models nor "
                      f"in `/mnt/input` directory", LogLevel.ERROR)
             self.update(message="module not found", state=op_state.ERROR)
-        dl = dl_class(path=self.load('input_files')['train'][0])
+        dl = dl_class(self.load('input_files')['train'][0], **self.config['local_dataset']['detail'])
         # dl = dl_class()
         data_cv_folds = zip(self.load('input_files')['train'], self.load('input_files')['test'])
         for counter, fold in enumerate(data_cv_folds):
@@ -240,4 +240,23 @@ class WriteResults(AppState, ABC):
                 pd.DataFrame(y_pred, columns=['y_pred']).to_csv(self.load('output_files')['pred'][counter], index=None)
                 pd.DataFrame(y_true, columns=['y_true']).to_csv(self.load('output_files')['target'][counter],
                                                                 index=None)
+        self.update(message="Finished!")
+
+
+class Centralized(AppState, ABC):
+    def run(self) -> str:
+        test_set = self.load('test_loader')
+        client_model = self.load('client_model')
+        train_loaders = self.load('train_loaders')
+        test_loaders = self.load('test_loaders')
+        state_dict = client_model.get_optimizer_params()
+        weights = client_model.get_weights()
+        client_model.model.epochs = self.load('fed_hyper_params')["max_iter"]
+        validation_set = None
+        for counter, (tr_dl, test_dl) in enumerate(zip(train_loaders, test_loaders)):
+            self.log(f"Training model #{counter}")
+            validation_set = test_dl if test_dl is not None else test_set
+            client_model.set_weights(weights)
+            client_model.set_optimizer_params(state_dict)
+            client_model.model.fit(tr_dl, validation_set, verbose=True)
         self.update(message="Finished!")

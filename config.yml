@@ -6,7 +6,12 @@ fc_deep:
 #    test: "test.npz"
 #    central_test: "mnist.npz"
     central_test: null
+#    detail: null
+    detail:
+      sep: ','
+      label: "Group"
 
+  centralized: True
 
   logic:
 #    mode: "file"
