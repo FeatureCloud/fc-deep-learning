@@ -1,3 +1,4 @@
+import os
 from abc import ABC
 import numpy as np
 from FeatureCloud.app.engine.app import AppState, LogLevel
@@ -309,7 +310,8 @@ class Simulation(Initialization, LocalUpdate, GlobalAggregation, WriteResults, A
             self.central_test_loader = dl.load(central_testset_path, self.client_model.model.test_batch_size)
 
         self.max_iter = self.load('config')['fed_hyper_params']['max_iter']
-        self.global_weights = self.client_model.get_weights()
+        self.global_weights = [self.client_model.get_weights()] * self.n_splits
+        # print(self.client_model.get_optimizer_params())
         self.state_dicts = [[self.client_model.get_optimizer_params()] * self.n_splits] * self.n_clients
         for c_round in range(1, self.max_iter):
             self.log(f"#{c_round} communication round...")
@@ -342,27 +344,13 @@ class Simulation(Initialization, LocalUpdate, GlobalAggregation, WriteResults, A
             self.write_central_test_results(self.client_model, self.central_test_loader, pred_file, target_file)
 
         for client, dir in enumerate(self.clients_dirs):
+            os.mkdir(f"/mnt/output/{dir}")
             pred_files = inject_root_path_to_clients_dir(dir, self.load('output_files')['pred'], input=False)
             target_files = inject_root_path_to_clients_dir(dir, self.load('output_files')['target'], input=False)
             self.write_local_test_results(self.client_model,
                                           self.data_loaders[client]['test_loaders'],
                                           pred_files,
                                           target_files)
-
-    # def load_clients_data(self, data_cv_folds, dl, client_model=None):
-    #     self.data_loaders = {}
-    #     self.clients_dirs = self.config['simulation']['clients_dir'].split(",")
-    #     self.n_clients = len(self.clients_dirs)
-    #     for client_dir in self.clients_dirs:
-    #         train_files = inject_root_path_to_clients_dir(client_dir, self.load('input_files')['train'])
-    #         test_files = inject_root_path_to_clients_dir(client_dir, self.load('input_files')['test'])
-    #         print(train_files)
-    #         data_cv_folds = zip(train_files, test_files)
-    #
-    #         self.client_model, train_loaders, test_loaders = \
-    #             super(Simulation, self).load_clients_data(data_cv_folds, dl, self.client_model)
-    #         self.data_loaders[client_dir.strip()] = {'train_loaders': train_loaders, 'test_loaders': test_loaders}
-    #     self.n_splits = len(train_loaders)
 
     def load_clients_data(self, data_cv_folds, dl, client_model=None):
         self.data_loaders = []
@@ -380,62 +368,3 @@ class Simulation(Initialization, LocalUpdate, GlobalAggregation, WriteResults, A
             train_files = inject_root_path_to_clients_dir(client_dir, self.load('input_files')['train'])
             test_files = inject_root_path_to_clients_dir(client_dir, self.load('input_files')['test'])
             self.clients_input_files.append([train_files, test_files])
-
-# class Simulation(AppState, ABC):
-#     client_model = None
-#     weights = []
-#     n_splits = 0
-#     clients_data_loaders = []
-#     n_clients = 0
-#     max_iter = 0
-#     clients_state_dict = []
-#     global_test_set = []
-#     def run(self) -> str:
-#         self.client_model = self.load('client_model')
-#         self.n_splits = self.load('n_splits')
-#         state_dict = [self.client_model.get_optimizer_params()] * self.n_splits
-#         self.weights = [self.client_model.get_weights()] * self.n_splits
-#         self.clients_data_loaders = self.load('clients_data_loaders')
-#         self.n_clients = len(self.clients_data_loaders)
-#         self.max_iter = self.load('max_iter')
-#         self.clients_state_dict = state_dict * self.n_clients
-#         self.global_test_set = []
-#         self.global_weights = []
-#         for round in range(self.max_iter):
-#             data_and_sd = zip(self.clients_data_loaders, self.clients_state_dict)
-#             new_parameters, trained_samples = []
-#             for c, (client_data, sd) in enumerate(data_and_sd):
-#                 params, n_samples, new_state_dicts = self.update_models(client_data, sd)
-#                 new_parameters.append(params)
-#                 trained_samples.append(n_samples)
-#                 self.clients_state_dict[c] = new_state_dicts
-#             self.weights = self.aggregate(new_parameters, trained_samples)
-#             self.evaluate()
-#
-#     def update_models(self, client_data, sd):
-#         new_parameters, new_state_dicts, trained_samples = [], [], []
-#         for split, (tr_dl, test_dl) in enumerate(client_data):
-#             self.client_model.update(tr_dl, test_dl, self.weights[split], sd[split])
-#             new_parameters.append(self.client_model.get_weights())
-#             trained_samples.append(self.client_model.num_trained_samples)
-#             new_state_dicts.append(self.client_model.get_optimizer_params())
-#         return new_parameters, trained_samples, new_state_dicts
-#
-#     def aggregate(self, new_parameters, trained_samples):
-#         params = zip(new_parameters, trained_samples)
-#         return average_weights(params, self.client_model, self.load('n_splits'))
-#
-#     def evaluate(self):
-#         for counter, w in enumerate(self.weights):
-#             self.update(message=f"Global aggregation")
-#             if test_set is not None:
-#                 self.update(message=f"#{self.load('iteration')}: Test G model")
-#                 self.log(f"Iteration #{self.load('iteration')}: Testing Global model #{counter}")
-#                 self.client_model.set_weights(w)
-#                 loss, acc = self.client_model.evaluate(test_set)
-#                 self.log(f"Iteration #{self.load('iteration')}: Global aggregation of model #{counter}:"
-#                          f" Acc={acc:.2f} Loss={loss:.2f}")
-#         for local_test_loader in self.clients_data_loaders:
-#             if local_test_loader is not None:
-#                 acc, loss = self.client_model.evaluate(local_test_loader)
-#                 self.log("")
