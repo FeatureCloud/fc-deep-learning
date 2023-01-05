@@ -158,3 +158,29 @@ def to_numpy(lst):
         except:
             return np.array(np_arr, dtype='object')
     return lst
+
+def average_weights(params):
+    n_clients = len(params)
+    n_splits = len(params[0])
+    global_weights = [np.array(params[0][0][0], dtype='object') * 0] * n_splits
+    total_n_samples = [0] * n_splits
+    for client_models in params:
+        for model_counter, (weights, n_samples) in enumerate(client_models):
+            global_weights[model_counter] += np.array(weights, dtype='object') * n_samples
+            total_n_samples[model_counter] += n_samples
+    updated_weights = []
+    for counter, (w, n) in enumerate(zip(global_weights, total_n_samples)):
+        updated_weights.append(w / n)
+    return updated_weights
+
+
+def inject_root_path_to_clients_dir(client_dir, dirs, input=True):
+    root_dir = f"/mnt/{'input' if input else 'output'}"
+    injected_dirs = [d.replace(root_dir, f"{root_dir}/{client_dir}") for d in dirs]
+    return injected_dirs
+
+
+def get_path_to_central_test_output_files():
+    central_pred_file = "/mnt/output/central_pred.csv"
+    central_target_file = "/mnt/output/central_target.csv"
+    return central_pred_file, central_target_file

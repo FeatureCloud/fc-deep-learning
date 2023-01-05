@@ -13,6 +13,9 @@ fc_deep:
 
   centralized: True
 
+  simulation:
+    clients_dir: c1,c2,c3 # Comma separated list of clients' directories
+
   logic:
 #    mode: "file"
 #    dir: "."

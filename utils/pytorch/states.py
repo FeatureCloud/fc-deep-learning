@@ -3,7 +3,8 @@ import numpy as np
 from FeatureCloud.app.engine.app import AppState, LogLevel
 from FeatureCloud.app.engine.app import State as op_state
 from CustomStates import ConfigState
-from utils.utils import design_model, get_dataloader, to_list, to_numpy
+from utils.utils import design_model, get_dataloader, to_list, to_numpy, average_weights, \
+    inject_root_path_to_clients_dir, get_path_to_central_test_output_files
 from utils.pytorch.DeepModel import Model
 from utils.pytorch.ClientModels import ClientModels
 from itertools import compress
@@ -22,53 +23,50 @@ class Initialization(ConfigState.State, ABC):
     """
 
     def run(self) -> str or None:
+        self.initialize()
+        self.store('config', self.config)
+        if self.config.get('simulation', None) is not None:
+            self.update(message="Simulation mode")
+            self.log("The app will run in the simulation mode...")
+            return ''
+        dl = self.get_dataloader(self.load('input_files')['train'][0])
+        data_cv_folds = zip(self.load('input_files')['train'], self.load('input_files')['test'])
+        client_model, train_loaders, test_loaders = self.load_clients_data(data_cv_folds, dl)
+        if self.is_coordinator and self.config['local_dataset']['central_test'] is not None:
+            test_loader = dl.load(self.load('input_files')['central_test'][0], client_model.model.test_batch_size)
+            self.store('test_loader', test_loader)
+        self.store('n_splits', len(train_loaders))
+        self.store('train_loaders', train_loaders)
+        self.store('test_loaders', test_loaders)
+        self.store('client_model', client_model)
+        self.store('smpc_used', self.config.get('use_smpc', False))
+        self.store('iteration', 0)
+        self.store('config', self.config)
+        if self.is_coordinator and len(self.clients) > 1:
+            data_to_send = [self.load('client_model').get_weights()]
+            self.broadcast_data(data=data_to_send, send_to_self=False)
 
+    def initialize(self):
         self.update(state=op_state.RUNNING)
         self.update(message="Reading the config file....")
         self.read_config()
         self.lazy_init()
         self.finalize_config()
-        self.store('smpc_used', self.config.get('use_smpc', False))
-        self.store('iteration', 0)
-        device = torch.device('cuda' if torch.cuda.is_available() and self.config['gpu'] else 'cpu')
-        self.read_input(device)
-        if self.is_coordinator and len(self.clients) > 1:
-            data_to_send = [self.load('client_model').get_weights()]
-            self.broadcast_data(data=data_to_send, send_to_self=False)
 
-    def read_input(self, device):
-        train_loaders, test_loaders = [], []
+    def get_dataloader(self, sample_train_set):
 
-        model, client_model = None, None
         if self.load('input_files')['test'] is None and self.load('input_files')['central_test'] is None:
             self.log("There is no test data provided", LogLevel.ERROR)
             self.update(message="no test data", state=op_state.ERROR)
-        self.log(f"Getting sample shape from {self.load('input_files')['train'][0]} dataset")
+        self.log(f"Getting sample shape from {sample_train_set} dataset")
 
         dl_class = get_dataloader(self.config['train_config']['data_loader'])
         if dl_class is None:
             self.log(f"module {self.config['train_config']['data_loader']} neither is found in implemented models nor "
                      f"in `/mnt/input` directory", LogLevel.ERROR)
             self.update(message="module not found", state=op_state.ERROR)
-        dl = dl_class(self.load('input_files')['train'][0], **self.config['local_dataset']['detail'])
-        # dl = dl_class()
-        data_cv_folds = zip(self.load('input_files')['train'], self.load('input_files')['test'])
-        for counter, fold in enumerate(data_cv_folds):
-            train_path, test_path = fold
-            if counter == 0:
-                client_model, batch_size, test_batch_size = self.build_client_model(dl.sample_data_loader, device)
-
-            train_loaders.append(dl.load(train_path, batch_size))
-            test_loaders.append(dl.load(test_path, test_batch_size))
-
-        if self.is_coordinator and self.config['local_dataset']['central_test'] is not None:
-            self.store('test_loader', dl.load(self.load('input_files')['central_test'][0], test_batch_size))
-        self.store("fed_hyper_params", self.config["fed_hyper_params"])
-        self.store('n_splits', len(train_loaders))
-        self.store("state_dict", [client_model.get_optimizer_params()] * self.load('n_splits'))
-        self.store('client_model', client_model)
-        self.store('train_loaders', train_loaders)
-        self.store('test_loaders', test_loaders)
+        dl = dl_class(sample_train_set, **self.config['local_dataset']['detail'])
+        return dl
 
     def build_client_model(self, data_loader, device):
         model_class, config = design_model(deepcopy(self.config['model']), data_loader)
@@ -81,7 +79,19 @@ class Initialization(ConfigState.State, ABC):
         # else:
         #     client_model = ClientModels(model, train_all,
         #                                 self.config["fed_hyper_params"]["batch_count"])
-        return client_model, model.batch_size, model.test_batch_size
+        return client_model
+
+    def load_clients_data(self, data_cv_folds, dl, client_model=None):
+        device = torch.device('cuda' if torch.cuda.is_available() and self.config['gpu'] else 'cpu')
+        train_loaders, test_loaders = [], []
+        for counter, (train_path, test_path) in enumerate(data_cv_folds):
+            if client_model is None:
+                client_model = self.build_client_model(dl.sample_data_loader, device)
+            tr_dl = dl.load(train_path, client_model.model.batch_size)
+            test_dl = dl.load(test_path, client_model.model.test_batch_size)
+            train_loaders.append(tr_dl)
+            test_loaders.append(test_dl)
+        return client_model, train_loaders, test_loaders
 
 
 class LocalUpdate(AppState, ABC):
@@ -95,7 +105,8 @@ class LocalUpdate(AppState, ABC):
         client_model = self.load('client_model')
         train_loaders = self.load('train_loaders')
         test_loaders = self.load('test_loaders')
-        state_dict = self.load('state_dict')
+        n_splits = len(train_loaders)
+        self.state_dict = [client_model.get_optimizer_params()] * n_splits
         self.update(message=f"#{self.load('iteration') + 1}: Waiting for Coordinator")
         weights, converged = self.get_global_parameters(client_model, n_splits=self.load('n_splits'))
 
@@ -103,9 +114,11 @@ class LocalUpdate(AppState, ABC):
             return 'Converged'
 
         weights, state_dict, train_loaders, test_loaders = \
-            self.remove_converged_models(weights, state_dict, train_loaders, test_loaders, converged)
-        data_to_send = self.local_computation(client_model, train_loaders, test_loaders, weights, state_dict)
-        self.send_data_for_aggregation(data_to_send)
+            self.remove_converged_models(weights, self.state_dict, train_loaders, test_loaders, converged)
+        new_parameters, trained_samples, self.state_dict = self.local_computation(client_model, train_loaders,
+                                                                                  test_loaders, weights,
+                                                                                  self.state_dict)
+        self.send_data_for_aggregation(list(zip(new_parameters, trained_samples)))
 
     def send_data_for_aggregation(self, data):
         data_to_send = data
@@ -153,16 +166,21 @@ class LocalUpdate(AppState, ABC):
         self.update(message=f"#{self.load('iteration')}: Local Training")
         new_parameters, new_state_dicts, trained_samples = [], [], []
         for counter, (tr_dl, test_dl, w, sd) in enumerate(zip(train_loaders, test_loaders, weights, state_dicts)):
-            self.log(f"Iteration {self.load('iteration')}: Update model #{counter}")
 
+            self.log(f"Iteration {self.load('iteration')}: Update model #{counter}")
+            # TODO: testing models before local update and calculate the averaged performance
+            # client_model.set_weights(w)
+            # if test_dl is not None:
+            #     client_model.evaluate(test_dl)
             client_model.update(tr_dl, w, sd, verbose=True)
+            # TODO: test the local performance after local update and found the effect!
             if test_dl is not None:
                 client_model.evaluate(test_dl)
             new_parameters.append(client_model.get_weights())
             trained_samples.append(client_model.num_trained_samples)
             new_state_dicts.append(client_model.get_optimizer_params())
-        self.store('state_dict', new_state_dicts)
-        return list(zip(new_parameters, trained_samples))
+
+        return new_parameters, trained_samples, new_state_dicts
 
 
 class GlobalAggregation(AppState, ABC):
@@ -181,32 +199,20 @@ class GlobalAggregation(AppState, ABC):
         if self.load('smpc_used'):
             global_weights = [to_numpy(model) / total_n_sample for model, total_n_sample in params]
         else:
-            global_weights = self.average_weights(params, client_model)
+            global_weights = average_weights(params)
         stopping_criteria = self.test_aggregated_models(global_weights, client_model)
 
         self.store('weights', global_weights)
         self.store('converged', stopping_criteria)
         return global_weights, stopping_criteria
 
-    def average_weights(self, params, client_model):
-        global_weights = [np.array(client_model.get_weights(), dtype='object') * 0] * self.load('n_splits')
-        total_n_samples = [0] * self.load('n_splits')
-        for client_models in params:
-            for model_counter, (weights, n_samples) in enumerate(client_models):
-                global_weights[model_counter] += np.array(weights, dtype='object') * n_samples
-                total_n_samples[model_counter] += n_samples
-        updated_weights = []
-        for counter, (w, n) in enumerate(zip(global_weights, total_n_samples)):
-            updated_weights.append(w / n)
-        return updated_weights
-
     def test_aggregated_models(self, global_weights, client_model):
         iteration = self.load('iteration')
-        max_iter = self.load('fed_hyper_params')["max_iter"]
+        max_iter = self.load('config')['fed_hyper_params']["max_iter"]
         test_set = self.load('test_loader')
         stopping_criteria = []
         for counter, w in enumerate(global_weights):
-            self.update(message=f"Global aggregation ")
+            self.update(message=f"Global aggregation")
             if test_set is not None:
                 self.update(message=f"#{self.load('iteration')}: Test G model")
                 self.log(f"Iteration #{self.load('iteration')}: Testing Global model #{counter}")
@@ -228,35 +234,208 @@ class WriteResults(AppState, ABC):
     def run(self) -> str or None:
         self.update(message=f"Writing Results")
         client_model = self.load('client_model')
-        if self.is_coordinator and self.load('test_loader') is not None:
+        central_test_loader = self.load('test_loader')
+        central_pred_file, central_target_file = get_path_to_central_test_output_files()
+        test_loaders = self.load('test_loaders')
+        pred_files = self.load('output_files')['pred']
+        target_files = self.load('output_files')['target']
+        # TODO: check updated weights are used here ==> client_model.set_weights()
+        self.write_central_test_results(client_model, central_test_loader, central_pred_file, central_target_file)
+        self.write_local_test_results(client_model, test_loaders, pred_files, target_files)
+        self.update(message="Finished!")
+
+    def write_central_test_results(self, client_model, test_loader, pred_file, target_file):
+        if self.is_coordinator and test_loader is not None:
             self.log(f"Writing the results for centralized test")
             y_pred, y_true = client_model.predict(self.load('test_loader'))
-            pd.DataFrame(y_pred, columns=['y_pred']).to_csv(self.load('output_files')['central_test'][0], index=None)
-            pd.DataFrame(y_true, columns=['y_true']).to_csv(self.load('output_files')['central_target'][0], index=None)
-        for counter, dl in enumerate(self.load('test_loaders')):
+            pd.DataFrame(y_pred, columns=['y_pred']).to_csv(pred_file, index=None)
+            pd.DataFrame(y_true, columns=['y_true']).to_csv(target_file, index=None)
+
+    def write_local_test_results(self, client_model, test_loaders, pred_files, target_files):
+        for counter, (dl, pred_file, target_file) in enumerate(zip(test_loaders, pred_files, target_files)):
             if dl is not None:
                 self.log(f"Writing the results for of local test-set #{counter}")
                 y_pred, y_true = client_model.predict(dl)
-                pd.DataFrame(y_pred, columns=['y_pred']).to_csv(self.load('output_files')['pred'][counter], index=None)
-                pd.DataFrame(y_true, columns=['y_true']).to_csv(self.load('output_files')['target'][counter],
-                                                                index=None)
-        self.update(message="Finished!")
+                pd.DataFrame(y_pred, columns=['y_pred']).to_csv(pred_file, index=None)
+                pd.DataFrame(y_true, columns=['y_true']).to_csv(target_file, index=None)
 
 
 class Centralized(AppState, ABC):
     def run(self) -> str:
-        test_set = self.load('test_loader')
+        central_test_loader = self.load('test_loader')
         client_model = self.load('client_model')
         train_loaders = self.load('train_loaders')
         test_loaders = self.load('test_loaders')
-        state_dict = client_model.get_optimizer_params()
+        n_splits = len(train_loaders)
+        state_dict = [client_model.get_optimizer_params()] * n_splits
         weights = client_model.get_weights()
-        client_model.model.epochs = self.load('fed_hyper_params')["max_iter"]
-        validation_set = None
+        client_model.model.epochs = self.load('config')['fed_hyper_params']["max_iter"]
         for counter, (tr_dl, test_dl) in enumerate(zip(train_loaders, test_loaders)):
             self.log(f"Training model #{counter}")
-            validation_set = test_dl if test_dl is not None else test_set
             client_model.set_weights(weights)
             client_model.set_optimizer_params(state_dict)
-            client_model.model.fit(tr_dl, validation_set, verbose=True)
+            client_model.model.fit(tr_dl, test_dl, verbose=True)
+            if central_test_loader is not None:
+                client_model.model.evaluate(central_test_loader)
         self.update(message="Finished!")
+
+
+class Simulation(Initialization, LocalUpdate, GlobalAggregation, WriteResults, ABC):
+    client_model = None
+    weights = []
+    n_splits = 0
+    clients_data_loaders = []
+    n_clients = 0
+    max_iter = 0
+    clients_state_dict = []
+    central_test_loader = None
+    global_weights = []
+    batch_size = 0
+    test_batch_size = 0
+    data_loaders = []
+    clients_dirs = []
+    state_dicts = []
+
+    def run(self) -> str:
+        # self.initialize()
+        self.config = self.load('config')
+        self.correct_clients_dir()
+        dl = self.get_dataloader(self.clients_input_files[0][0][0])
+        self.load_clients_data(None, dl)
+        if self.config['local_dataset']['central_test'] is not None:
+            central_testset_path = inject_root_path_to_clients_dir(self.clients_dirs[0],
+                                                                   self.load('input_files')['central_test']
+                                                                   )[0]
+            self.central_test_loader = dl.load(central_testset_path, self.client_model.model.test_batch_size)
+
+        self.max_iter = self.load('config')['fed_hyper_params']['max_iter']
+        self.global_weights = self.client_model.get_weights()
+        self.state_dicts = [[self.client_model.get_optimizer_params()] * self.n_splits] * self.n_clients
+        for c_round in range(1, self.max_iter):
+            self.log(f"#{c_round} communication round...")
+            self.store('iteration', c_round)
+            new_params = []
+            for client in range(self.n_clients):
+                self.log(f"Local training for client #{client}")
+                new_parameters, n_trained_samples, self.state_dicts[client] = \
+                    self.local_computation(self.client_model,
+                                           self.data_loaders[client]['train_loaders'],
+                                           self.data_loaders[client]['test_loaders'],
+                                           self.global_weights,
+                                           self.state_dicts[client]
+                                           )
+                self.log(n_trained_samples)
+                print(np.shape(new_parameters[0]))
+                new_params.append(list(zip(new_parameters, n_trained_samples)))
+            average_weights(new_params)
+            stopping_criteria = self.test_aggregated_models(self.global_weights, self.client_model)
+            if stopping_criteria:
+                break
+        self.write_results()
+
+    def write_results(self):
+        if self.config['local_dataset']['central_test'] is not None:
+            # only the coordinator, i.e., first client, will receive the central testset
+            pred_file, target_file = get_path_to_central_test_output_files()
+            pred_file = inject_root_path_to_clients_dir(self.clients_dirs[0], [pred_file], input=False)[0]
+            target_file = inject_root_path_to_clients_dir(self.clients_dirs[0], [target_file], input=False)[0]
+            self.write_central_test_results(self.client_model, self.central_test_loader, pred_file, target_file)
+
+        for client, dir in enumerate(self.clients_dirs):
+            pred_files = inject_root_path_to_clients_dir(dir, self.load('output_files')['pred'], input=False)
+            target_files = inject_root_path_to_clients_dir(dir, self.load('output_files')['target'], input=False)
+            self.write_local_test_results(self.client_model,
+                                          self.data_loaders[client]['test_loaders'],
+                                          pred_files,
+                                          target_files)
+
+    # def load_clients_data(self, data_cv_folds, dl, client_model=None):
+    #     self.data_loaders = {}
+    #     self.clients_dirs = self.config['simulation']['clients_dir'].split(",")
+    #     self.n_clients = len(self.clients_dirs)
+    #     for client_dir in self.clients_dirs:
+    #         train_files = inject_root_path_to_clients_dir(client_dir, self.load('input_files')['train'])
+    #         test_files = inject_root_path_to_clients_dir(client_dir, self.load('input_files')['test'])
+    #         print(train_files)
+    #         data_cv_folds = zip(train_files, test_files)
+    #
+    #         self.client_model, train_loaders, test_loaders = \
+    #             super(Simulation, self).load_clients_data(data_cv_folds, dl, self.client_model)
+    #         self.data_loaders[client_dir.strip()] = {'train_loaders': train_loaders, 'test_loaders': test_loaders}
+    #     self.n_splits = len(train_loaders)
+
+    def load_clients_data(self, data_cv_folds, dl, client_model=None):
+        self.data_loaders = []
+        for client_files in self.clients_input_files:
+            self.client_model, train_loaders, test_loaders = \
+                super(Simulation, self).load_clients_data(zip(*client_files), dl, self.client_model)
+            self.data_loaders.append({'train_loaders': train_loaders, 'test_loaders': test_loaders})
+        self.n_splits = len(train_loaders)
+
+    def correct_clients_dir(self):
+        self.clients_dirs = self.config['simulation']['clients_dir'].split(",")
+        self.n_clients = len(self.clients_dirs)
+        self.clients_input_files = []
+        for client_dir in self.clients_dirs:
+            train_files = inject_root_path_to_clients_dir(client_dir, self.load('input_files')['train'])
+            test_files = inject_root_path_to_clients_dir(client_dir, self.load('input_files')['test'])
+            self.clients_input_files.append([train_files, test_files])
+
+# class Simulation(AppState, ABC):
+#     client_model = None
+#     weights = []
+#     n_splits = 0
+#     clients_data_loaders = []
+#     n_clients = 0
+#     max_iter = 0
+#     clients_state_dict = []
+#     global_test_set = []
+#     def run(self) -> str:
+#         self.client_model = self.load('client_model')
+#         self.n_splits = self.load('n_splits')
+#         state_dict = [self.client_model.get_optimizer_params()] * self.n_splits
+#         self.weights = [self.client_model.get_weights()] * self.n_splits
+#         self.clients_data_loaders = self.load('clients_data_loaders')
+#         self.n_clients = len(self.clients_data_loaders)
+#         self.max_iter = self.load('max_iter')
+#         self.clients_state_dict = state_dict * self.n_clients
+#         self.global_test_set = []
+#         self.global_weights = []
+#         for round in range(self.max_iter):
+#             data_and_sd = zip(self.clients_data_loaders, self.clients_state_dict)
+#             new_parameters, trained_samples = []
+#             for c, (client_data, sd) in enumerate(data_and_sd):
+#                 params, n_samples, new_state_dicts = self.update_models(client_data, sd)
+#                 new_parameters.append(params)
+#                 trained_samples.append(n_samples)
+#                 self.clients_state_dict[c] = new_state_dicts
+#             self.weights = self.aggregate(new_parameters, trained_samples)
+#             self.evaluate()
+#
+#     def update_models(self, client_data, sd):
+#         new_parameters, new_state_dicts, trained_samples = [], [], []
+#         for split, (tr_dl, test_dl) in enumerate(client_data):
+#             self.client_model.update(tr_dl, test_dl, self.weights[split], sd[split])
+#             new_parameters.append(self.client_model.get_weights())
+#             trained_samples.append(self.client_model.num_trained_samples)
+#             new_state_dicts.append(self.client_model.get_optimizer_params())
+#         return new_parameters, trained_samples, new_state_dicts
+#
+#     def aggregate(self, new_parameters, trained_samples):
+#         params = zip(new_parameters, trained_samples)
+#         return average_weights(params, self.client_model, self.load('n_splits'))
+#
+#     def evaluate(self):
+#         for counter, w in enumerate(self.weights):
+#             self.update(message=f"Global aggregation")
+#             if test_set is not None:
+#                 self.update(message=f"#{self.load('iteration')}: Test G model")
+#                 self.log(f"Iteration #{self.load('iteration')}: Testing Global model #{counter}")
+#                 self.client_model.set_weights(w)
+#                 loss, acc = self.client_model.evaluate(test_set)
+#                 self.log(f"Iteration #{self.load('iteration')}: Global aggregation of model #{counter}:"
+#                          f" Acc={acc:.2f} Loss={loss:.2f}")
+#         for local_test_loader in self.clients_data_loaders:
+#             if local_test_loader is not None:
+#                 acc, loss = self.client_model.evaluate(local_test_loader)
+#                 self.log("")

@@ -1,4 +1,4 @@
-from utils.pytorch.states import Initialization, LocalUpdate, GlobalAggregation, WriteResults, Centralized
+from utils.pytorch.states import Initialization, LocalUpdate, GlobalAggregation, WriteResults, Centralized, Simulation
 from FeatureCloud.app.engine.app import app_state, Role
 
 name = 'fc_deep'
@@ -15,10 +15,13 @@ class B1(Initialization):
     def register(self):
         self.register_transition('Local Update', label="Broadcast initial weights")
         self.register_transition('Centralized Training', role=Role.COORDINATOR, label="Local state transition")
+        self.register_transition('Federated Simulation', role=Role.COORDINATOR, label="Local state transition")
 
     def run(self) -> str or None:
         super().run()
-        if self.config['centralized'] and len(self.clients) == 1 and self.coordinator:
+        if self.config.get("simulation", None) is not None:
+            return 'Federated Simulation'
+        if self.config.get('centralized', None) and len(self.clients) == 1 and self.coordinator:
             return 'Centralized Training'
         return 'Local Update'
 
@@ -75,6 +78,21 @@ class CentralizedTraining(Centralized):
     Read input data
     read config files
 
+    """
+
+    def register(self):
+        self.register_transition('terminal', role=Role.COORDINATOR, label="Terminate the execution")
+
+    def run(self) -> str or None:
+        super().run()
+        return 'terminal'
+
+
+@app_state(name='Federated Simulation', role=Role.COORDINATOR,  app_name=name)
+class FederatedSimulation(Simulation):
+    """
+    Read input data
+    read config files
     """
 
     def register(self):
