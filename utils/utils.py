@@ -22,6 +22,7 @@ from models.pytorch import models
 import importlib.util
 import sys
 from utils.pytorch import DataLoader as SupportedLoaders
+from itertools import compress
 
 
 def get_dataloader(name):
@@ -184,3 +185,11 @@ def get_path_to_central_test_output_files():
     central_pred_file = "/mnt/output/central_pred.csv"
     central_target_file = "/mnt/output/central_target.csv"
     return central_pred_file, central_target_file
+
+def remove_converged_models(weights, state_dict, train_loaders, test_loaders, converged):
+    if any(converged):
+        weights = list(compress(weights, converged))
+        state_dict = list(compress(state_dict, converged))
+        train_loaders = list(compress(train_loaders, converged))
+        test_loaders = list(compress(test_loaders, converged))
+    return weights, state_dict, train_loaders, test_loaders

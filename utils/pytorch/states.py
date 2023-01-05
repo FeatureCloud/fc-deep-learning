@@ -5,10 +5,9 @@ from FeatureCloud.app.engine.app import AppState, LogLevel
 from FeatureCloud.app.engine.app import State as op_state
 from CustomStates import ConfigState
 from utils.utils import design_model, get_dataloader, to_list, to_numpy, average_weights, \
-    inject_root_path_to_clients_dir, get_path_to_central_test_output_files
+    inject_root_path_to_clients_dir, get_path_to_central_test_output_files, remove_converged_models
 from utils.pytorch.DeepModel import Model
 from utils.pytorch.ClientModels import ClientModels
-from itertools import compress
 import pandas as pd
 from copy import deepcopy
 import torch
@@ -115,7 +114,7 @@ class LocalUpdate(AppState, ABC):
             return 'Converged'
 
         weights, state_dict, train_loaders, test_loaders = \
-            self.remove_converged_models(weights, self.state_dict, train_loaders, test_loaders, converged)
+            remove_converged_models(weights, self.state_dict, train_loaders, test_loaders, converged)
         new_parameters, trained_samples, self.state_dict = self.local_computation(client_model, train_loaders,
                                                                                   test_loaders, weights,
                                                                                   self.state_dict)
@@ -154,13 +153,13 @@ class LocalUpdate(AppState, ABC):
         weights, converged = self.await_data(unwrap=True)
         return weights, converged
 
-    def remove_converged_models(self, weights, state_dict, train_loaders, test_loaders, converged):
-        if any(converged):
-            weights = list(compress(weights, converged))
-            state_dict = list(compress(state_dict, converged))
-            train_loaders = list(compress(train_loaders, converged))
-            test_loaders = list(compress(test_loaders, converged))
-        return weights, state_dict, train_loaders, test_loaders
+    # def remove_converged_models(self, weights, state_dict, train_loaders, test_loaders, converged):
+    #     if any(converged):
+    #         weights = list(compress(weights, converged))
+    #         state_dict = list(compress(state_dict, converged))
+    #         train_loaders = list(compress(train_loaders, converged))
+    #         test_loaders = list(compress(test_loaders, converged))
+    #     return weights, state_dict, train_loaders, test_loaders
 
     def local_computation(self, client_model, train_loaders, test_loaders, weights, state_dicts):
         self.store('iteration', self.load('iteration') + 1)
