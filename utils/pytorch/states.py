@@ -153,14 +153,6 @@ class LocalUpdate(AppState, ABC):
         weights, converged = self.await_data(unwrap=True)
         return weights, converged
 
-    # def remove_converged_models(self, weights, state_dict, train_loaders, test_loaders, converged):
-    #     if any(converged):
-    #         weights = list(compress(weights, converged))
-    #         state_dict = list(compress(state_dict, converged))
-    #         train_loaders = list(compress(train_loaders, converged))
-    #         test_loaders = list(compress(test_loaders, converged))
-    #     return weights, state_dict, train_loaders, test_loaders
-
     def local_computation(self, client_model, train_loaders, test_loaders, weights, state_dicts):
         self.store('iteration', self.load('iteration') + 1)
         self.update(message=f"#{self.load('iteration')}: Local Training")
