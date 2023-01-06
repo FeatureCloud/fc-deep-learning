@@ -49,7 +49,6 @@ fc_deep:
     loss:
       name: 'CrossEntropyLoss'
 
-
   model: # 'cnn' or 'cnn.py' or layers_dict
     name: 'cnn.py'
     n_classes: 10
