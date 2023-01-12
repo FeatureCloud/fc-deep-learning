@@ -262,10 +262,10 @@ class Centralized(AppState, ABC):
         state_dict = [client_model.get_optimizer_params()] * n_splits
         weights = client_model.get_weights()
         client_model.model.epochs = self.load('config')['fed_hyper_params']["max_iter"]
-        for counter, (tr_dl, test_dl) in enumerate(zip(train_loaders, test_loaders)):
+        for counter, (tr_dl, test_dl, sd) in enumerate(zip(train_loaders, test_loaders, state_dict)):
             self.log(f"Training model #{counter}")
             client_model.set_weights(weights)
-            client_model.set_optimizer_params(state_dict)
+            client_model.set_optimizer_params(sd)
             client_model.model.fit(tr_dl, test_dl, verbose=True)
             if central_test_loader is not None:
                 client_model.model.evaluate(central_test_loader)
