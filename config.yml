@@ -26,6 +26,7 @@ fc_deep:
   result:
     pred: "y_pred.csv"
     target: "y_test.csv"
+    model: "model.pt"
 
 
   fed_hyper_params:

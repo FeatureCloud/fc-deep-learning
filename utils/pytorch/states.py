@@ -111,6 +111,7 @@ class LocalUpdate(AppState, ABC):
         weights, converged = self.get_global_parameters(client_model, n_splits=self.load('n_splits'))
 
         if all(converged):
+            self.store('weights', weights)
             return 'Converged'
 
         weights, state_dict, train_loaders, test_loaders = \
@@ -233,7 +234,8 @@ class WriteResults(AppState, ABC):
         target_files = self.load('output_files')['target']
         # TODO: check updated weights are used here ==> client_model.set_weights()
         self.write_central_test_results(client_model, central_test_loader, central_pred_file, central_target_file)
-        self.write_local_test_results(client_model, test_loaders, pred_files, target_files)
+        self.write_local_test_results(client_model, test_loaders, pred_files, target_files, self.load('weights'))
+        self.write_dnn_models(client_model, self.load('output_files')['model'], self.load('weights'))
         self.update(message="Finished!")
 
     def write_central_test_results(self, client_model, test_loader, pred_file, target_file):
@@ -243,13 +245,20 @@ class WriteResults(AppState, ABC):
             pd.DataFrame(y_pred, columns=['y_pred']).to_csv(pred_file, index=None)
             pd.DataFrame(y_true, columns=['y_true']).to_csv(target_file, index=None)
 
-    def write_local_test_results(self, client_model, test_loaders, pred_files, target_files):
-        for counter, (dl, pred_file, target_file) in enumerate(zip(test_loaders, pred_files, target_files)):
+    def write_local_test_results(self, client_model, test_loaders, pred_files, target_files, weights):
+        for counter, (dl, w, pred_file, target_file) in enumerate(zip(test_loaders, weights, pred_files, target_files)):
             if dl is not None:
                 self.log(f"Writing the results for of local test-set #{counter}")
+                client_model.set_weights(w)
                 y_pred, y_true = client_model.predict(dl)
                 pd.DataFrame(y_pred, columns=['y_pred']).to_csv(pred_file, index=None)
                 pd.DataFrame(y_true, columns=['y_true']).to_csv(target_file, index=None)
+
+    def write_dnn_models(self, client_model, dirs, weights):
+        if self.load('config')['result'].get('model', None) is not None:
+            for counter, (model_file, weight) in enumerate(zip(dirs, weights)):
+                client_model.set_weights(weight)
+                client_model.store(model_file)
 
 
 class Centralized(AppState, ABC):
@@ -317,8 +326,8 @@ class Simulation(Initialization, LocalUpdate, GlobalAggregation, WriteResults, A
                                            self.global_weights,
                                            self.state_dicts[client]
                                            )
-                self.log(n_trained_samples)
-                print(np.shape(new_parameters[0]))
+                # self.log(n_trained_samples)
+                # print(np.shape(new_parameters[0]))
                 new_params.append(list(zip(new_parameters, n_trained_samples)))
             average_weights(new_params)
             stopping_criteria = self.test_aggregated_models(self.global_weights, self.client_model)
@@ -341,7 +350,8 @@ class Simulation(Initialization, LocalUpdate, GlobalAggregation, WriteResults, A
             self.write_local_test_results(self.client_model,
                                           self.data_loaders[client]['test_loaders'],
                                           pred_files,
-                                          target_files)
+                                          target_files,
+                                          self.global_weights)
 
     def load_clients_data(self, data_cv_folds, dl, client_model=None):
         self.data_loaders = []

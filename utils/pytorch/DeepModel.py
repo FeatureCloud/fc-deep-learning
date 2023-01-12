@@ -252,6 +252,10 @@ class Model:
     def get_optimizer_params(self):
         return self.optimizer.state_dict()
 
+    def store(self, path):
+        model_scripted = torch.jit.script(self.model)
+        model_scripted.save(path)
+
 
 class AverageMeter(object):
     def __init__(self):

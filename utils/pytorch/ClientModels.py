@@ -142,3 +142,6 @@ class ClientModels:
 
     def set_optimizer_params(self, state_dict):
         self.model.set_optimizer_params(state_dict)
+
+    def store(self, path):
+        self.model.store(path)
