@@ -65,7 +65,7 @@ class Model:
         opt_param = opt.get('param', {})
 
         loss = attributes.pop('loss')
-        loss_func = loss['name']
+        loss_func = loss['func']
         loss_param = loss.get('param', {})
         self.metrics = {}
         self.metrics_initialize(attributes.pop('metrics'))
@@ -79,7 +79,7 @@ class Model:
         self.model = model(**config)
         opt_param.update({'params': self.model.parameters()})
         self.model.to(device=self.device)
-        self.loss_func = self.get_module(nn, loss_func, loss_param, to_device=True)
+        self.loss_func = loss_func(**loss_param).to(device=self.device)
         self.optimizer = self.get_module(optim, opt_func, opt_param)
 
     def metrics_initialize(self, metric_classes):
@@ -117,9 +117,7 @@ class Model:
             for data, target in dl:
                 data = data.to(device=self.device)
                 target = target.to(device=self.device)
-
                 pred = self.model(data)
-                self.accuracy(pred, target)
                 loss = self.loss_func(pred, target)
                 self.metric_performance(pred, target)
                 test_loss.update(loss.item(), data.size(0))
