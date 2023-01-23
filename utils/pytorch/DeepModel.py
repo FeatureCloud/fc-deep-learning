@@ -74,9 +74,16 @@ class Model:
             setattr(self, k, v)
         self.device = device
         self.model = model(**config)
+        opt_param.update({'params': self.model.parameters()})
         self.model.to(device=self.device)
-        self.loss_func = getattr(nn, loss_func)(**loss_param).to(device=self.device)
-        self.optimizer = getattr(optim, opt_func)(self.model.parameters(), **opt_param)
+        self.loss_func = self.get_module(nn, loss_func, loss_param, to_device=True)
+        self.optimizer = self.get_module(optim, opt_func, opt_param)
+
+    def get_module(self, module_class, module, params, to_device=False):
+        mod = getattr(module_class, module)(**params)
+        if to_device:
+            mod = mod.to(device=self.device)
+        return mod
 
     def evaluate(self, dl):
         """ evaluate the network's performances in terms of loss and accuracy
@@ -253,8 +260,7 @@ class Model:
         return self.optimizer.state_dict()
 
     def store(self, path):
-        model_scripted = torch.jit.script(self.model)
-        model_scripted.save(path)
+        torch.save(self.model.state_dict(), path)
 
 
 class AverageMeter(object):
