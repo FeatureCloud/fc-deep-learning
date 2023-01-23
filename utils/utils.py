@@ -45,6 +45,12 @@ def get_dataloader(name):
     return get_custom_module(module=name, existing=SupportedLoaders, class_name='CustomDataLoader')
 
 
+def get_metrics(name, package):
+    return get_custom_module(module=name,
+                             existing=importlib.import_module(package),
+                             class_name='CustomMetric')
+
+
 def get_custom_module(module, existing, class_name=None):
     """ Loading the class of some module that maybe implemented in models or uploaded by the user
         This method supports following custom modules:
@@ -65,7 +71,7 @@ def get_custom_module(module, existing, class_name=None):
 
     """
     if hasattr(existing, module):
-        return getattr(SupportedLoaders, module)
+        return getattr(existing, module)
     if '.py' in module:
         dl = f"{module.split('.')[0]}.{class_name}"
         spec = importlib.util.spec_from_file_location(dl, f"/mnt/input/{module}")
@@ -160,6 +166,7 @@ def to_numpy(lst):
             return np.array(np_arr, dtype='object')
     return lst
 
+
 def average_weights(params):
     n_clients = len(params)
     n_splits = len(params[0])
@@ -185,6 +192,7 @@ def get_path_to_central_test_output_files():
     central_pred_file = "/mnt/output/central_pred.csv"
     central_target_file = "/mnt/output/central_target.csv"
     return central_pred_file, central_target_file
+
 
 def remove_converged_models(weights, state_dict, train_loaders, test_loaders, converged):
     if any(converged):
