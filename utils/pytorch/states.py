@@ -5,7 +5,7 @@ from FeatureCloud.app.engine.app import AppState, LogLevel
 from FeatureCloud.app.engine.app import State as op_state
 from CustomStates import ConfigState
 from utils.utils import design_model, get_dataloader, to_list, to_numpy, average_weights, \
-    inject_root_path_to_clients_dir, get_path_to_central_test_output_files, remove_converged_models
+    inject_root_path_to_clients_dir, get_path_to_central_test_output_files, remove_converged_models, get_metrics
 from utils.pytorch.DeepModel import Model
 from utils.pytorch.ClientModels import ClientModels
 import pandas as pd
@@ -30,6 +30,7 @@ class Initialization(ConfigState.State, ABC):
             self.log("The app will run in the simulation mode...")
             return ''
         dl = self.get_dataloader(self.load('input_files')['train'][0])
+        self.get_custom_modules()
         data_cv_folds = zip(self.load('input_files')['train'], self.load('input_files')['test'])
         client_model, train_loaders, test_loaders = self.load_clients_data(data_cv_folds, dl)
         if self.is_coordinator and self.config['local_dataset']['central_test'] is not None:
@@ -45,6 +46,24 @@ class Initialization(ConfigState.State, ABC):
         if self.is_coordinator and len(self.clients) > 1:
             data_to_send = [self.load('client_model').get_weights()]
             self.broadcast_data(data=data_to_send, send_to_self=False)
+
+    def get_custom_modules(self):
+        modules = {}
+
+        # Metrics
+        metrics = []
+        for metric in self.config['train_config']['metrics']:
+            print(metric)
+            m = {'name': metric['name'],
+                 'func': get_metrics(metric['name'], metric['package']),
+                 'param': metric['param']}
+            metrics.append(m)
+        modules['metrics'] = metrics
+
+        self.config['train_config']['metrics'] = metrics
+        # Loss function
+
+
 
     def initialize(self):
         self.update(state=op_state.RUNNING)
@@ -233,13 +252,15 @@ class WriteResults(AppState, ABC):
         pred_files = self.load('output_files')['pred']
         target_files = self.load('output_files')['target']
         # TODO: check updated weights are used here ==> client_model.set_weights()
-        self.write_central_test_results(client_model, central_test_loader, central_pred_file, central_target_file)
+        self.write_central_test_results(client_model, central_test_loader, central_pred_file, central_target_file,
+                                        self.load('weights'))
         self.write_local_test_results(client_model, test_loaders, pred_files, target_files, self.load('weights'))
         self.write_dnn_models(client_model, self.load('output_files')['model'], self.load('weights'))
         self.update(message="Finished!")
 
-    def write_central_test_results(self, client_model, test_loader, pred_file, target_file):
+    def write_central_test_results(self, client_model, test_loader, pred_file, target_file, weights):
         if self.is_coordinator and test_loader is not None:
+            client_model.set_weights(weights)
             self.log(f"Writing the results for centralized test")
             y_pred, y_true = client_model.predict(self.load('test_loader'))
             pd.DataFrame(y_pred, columns=['y_pred']).to_csv(pred_file, index=None)
