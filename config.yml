@@ -49,6 +49,15 @@ fc_deep:
         lr: 0.1
     loss:
       name: 'CrossEntropyLoss'
+    metrics:
+      - name: 'Accuracy'
+        package: 'torchmetrics.classification'
+        param:
+          task: 'multiclass'
+          num_classes: 4
+#      - name: 'RMSE'
+#        params: null
+
 
   model: # 'cnn' or 'cnn.py' or layers_dict
     name: 'cnn.py'
