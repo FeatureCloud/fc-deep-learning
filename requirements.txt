@@ -2,3 +2,7 @@ featurecloud
 scipy
 scikit-learn
 bios
+torch
+torchvision
+torchaudio
+torchmetrics
