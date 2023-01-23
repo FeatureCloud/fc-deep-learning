@@ -48,7 +48,15 @@ fc_deep:
       param:
         lr: 0.1
     loss:
-      name: 'CrossEntropyLoss'
+      name: 'focal_loss.py'
+#      param: null
+      param:
+        alpha:
+          - 0.2
+          - 0.3
+          - 0.3
+          - 0.2
+        gamma: 1.1
     metrics:
       - name: 'Accuracy'
         package: 'torchmetrics.classification'
