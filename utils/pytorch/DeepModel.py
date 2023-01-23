@@ -16,7 +16,6 @@
     limitations under the License.
 
 """
-from torch import nn
 import torch.optim as optim
 import torch
 import numpy as np
@@ -60,13 +59,7 @@ class Model:
         attributes: dict
             arguments for DeepModel
         """
-        opt = attributes.pop('optimizer')
-        opt_func = opt['name']
-        opt_param = opt.get('param', {})
 
-        loss = attributes.pop('loss')
-        loss_func = loss['func']
-        loss_param = loss.get('param', {})
         self.metrics = {}
         self.metrics_initialize(attributes.pop('metrics'))
 
@@ -77,10 +70,20 @@ class Model:
             setattr(self, k, v)
         self.device = device
         self.model = model(**config)
-        opt_param.update({'params': self.model.parameters()})
         self.model.to(device=self.device)
+
+        # initialize loss
+        loss = attributes.pop('loss')
+        loss_func = loss['func']
+        loss_param = loss.get('param', {})
         self.loss_func = loss_func(**loss_param).to(device=self.device)
-        self.optimizer = self.get_module(optim, opt_func, opt_param)
+
+        # initialize optimizer
+        opt = attributes.pop('optimizer')
+        opt_func = opt['opt']
+        opt_param = opt.get('param', {})
+        opt_param.update({'params': self.model.parameters()})
+        self.optimizer = opt_func(**opt_param)
 
     def metrics_initialize(self, metric_classes):
         for metric in metric_classes:

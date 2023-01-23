@@ -6,7 +6,7 @@ from FeatureCloud.app.engine.app import State as op_state
 from CustomStates import ConfigState
 from utils.utils import design_model, get_dataloader, to_list, to_numpy, average_weights, \
     inject_root_path_to_clients_dir, get_path_to_central_test_output_files, remove_converged_models, get_metrics, \
-    get_loss_func
+    get_loss_func, get_optimizer
 from utils.pytorch.DeepModel import Model
 from utils.pytorch.ClientModels import ClientModels
 import pandas as pd
@@ -61,9 +61,16 @@ class Initialization(ConfigState.State, ABC):
         modules['metrics'] = metrics
 
         self.config['train_config']['metrics'] = metrics
+
         # Loss function
         l = get_loss_func(self.config['train_config']['loss']['name'])
         self.config['train_config']['loss'] = {'func': l, 'param': self.config['train_config']['loss'].get('param', {})}
+
+        # Optimizer
+        optimizer = get_optimizer(self.config['train_config']['optimizer']['name'])
+        self.config['train_config']['optimizer'] = {'opt': optimizer,
+                                                    'param': self.config['train_config']['optimizer'].get('param', {})
+                                                    }
 
     def initialize(self):
         self.update(state=op_state.RUNNING)

@@ -23,6 +23,7 @@ import importlib.util
 import sys
 from utils.pytorch import DataLoader as SupportedLoaders
 from itertools import compress
+import torch.optim as optim
 
 
 def get_dataloader(name):
@@ -89,6 +90,27 @@ def get_loss_func(name):
     return get_custom_module(module=name,
                              existing=nn,
                              class_name='CustomLoss')
+
+
+def get_optimizer(name):
+    """ return the class of optimizer that can be provided in one of the following ways:
+        1. supported optimizers in torch.optim
+        2. custom optimizer that should be implemented as a class
+
+    Parameters
+    ----------
+    name: str
+        name of the optimizer
+        for implemented optimizer in torch.optim, it should be the same importable name from torch.optim
+
+    Returns
+    -------
+    torch.optim.optimizer.Optimizer
+
+    """
+    return get_custom_module(module=name,
+                             existing=optim,
+                             class_name='CustomOptimizer')
 
 
 def get_custom_module(module, existing, class_name=None):
