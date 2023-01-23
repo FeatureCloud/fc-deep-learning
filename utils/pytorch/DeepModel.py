@@ -84,7 +84,6 @@ class Model:
 
     def metrics_initialize(self, metric_classes):
         for metric in metric_classes:
-            print(metric)
             m = {'func': metric['func'](**metric.get('param', {})),
                  'AverageMeter': AverageMeter()
                  }

@@ -54,17 +54,16 @@ class Initialization(ConfigState.State, ABC):
         # Metrics
         metrics = []
         for metric in self.config['train_config']['metrics']:
-            print(metric)
             m = {'name': metric['name'],
                  'func': get_metrics(metric['name'], metric['package']),
-                 'param': metric['param']}
+                 'param': metric.get('param', {})}
             metrics.append(m)
         modules['metrics'] = metrics
 
         self.config['train_config']['metrics'] = metrics
         # Loss function
         l = get_loss_func(self.config['train_config']['loss']['name'])
-        self.config['train_config']['loss'] = {'func': l, 'param': self.config['train_config']['loss']['param']}
+        self.config['train_config']['loss'] = {'func': l, 'param': self.config['train_config']['loss'].get('param', {})}
 
     def initialize(self):
         self.update(state=op_state.RUNNING)
