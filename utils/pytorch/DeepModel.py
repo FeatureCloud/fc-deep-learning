@@ -62,10 +62,13 @@ class Model:
         """
         opt = attributes.pop('optimizer')
         opt_func = opt['name']
-        opt_param = opt['param'] if 'param' in opt else {}
+        opt_param = opt.get('param', {})
+
         loss = attributes.pop('loss')
         loss_func = loss['name']
-        loss_param = loss['param'] if 'param' in loss else {}
+        loss_param = loss.get('param', {})
+        self.metrics = {}
+        self.metrics_initialize(attributes.pop('metrics'))
 
         # Set attributes for Model:
         # batch_size
@@ -78,6 +81,14 @@ class Model:
         self.model.to(device=self.device)
         self.loss_func = self.get_module(nn, loss_func, loss_param, to_device=True)
         self.optimizer = self.get_module(optim, opt_func, opt_param)
+
+    def metrics_initialize(self, metric_classes):
+        for metric in metric_classes:
+            print(metric)
+            m = {'func': metric['func'](**metric.get('param', {})),
+                 'AverageMeter': AverageMeter()
+                 }
+            self.metrics[metric['name']] = m
 
     def get_module(self, module_class, module, params, to_device=False):
         mod = getattr(module_class, module)(**params)
@@ -100,22 +111,29 @@ class Model:
         acc : float
             running accuracy
         """
-        test_loss, test_acc = AverageMeter(), AverageMeter()
+        test_loss = AverageMeter()
         self.model.eval()
-        correct, losses, num_samples = 0, 0.0, 0
         with torch.no_grad():
             for data, target in dl:
                 data = data.to(device=self.device)
                 target = target.to(device=self.device)
 
                 pred = self.model(data)
-                correct += (pred.max(1)[1] == target).sum()
+                self.accuracy(pred, target)
                 loss = self.loss_func(pred, target)
-                prediction = pred.max(1, keepdim=True)[1]
-                test_acc.update(prediction.eq(target.view_as(prediction)).sum().item() / data.size(0), data.size(0))
+                self.metric_performance(pred, target)
                 test_loss.update(loss.item(), data.size(0))
         self.model.train()
-        return test_loss.avg, test_acc.avg
+        return test_loss.avg
+
+    def metric_performance(self, pred, target):
+        for name, metric in self.metrics.items():
+            perf = metric['func'](pred, target)
+            metric['AverageMeter'].update(perf)
+
+    def metric_reset(self):
+        for metric in self.metrics.values():
+            metric['AverageMeter'].reset()
 
     def predict(self, dl):
         """ evaluate the network's performances in terms of loss and accuracy
@@ -163,10 +181,9 @@ class Model:
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-        prediction = pred.max(1, keepdim=True)[1]
-        train_acc = prediction.eq(targets.view_as(prediction)).sum().item() / data.size(0)
+        self.metric_performance(pred, targets)
         train_loss = loss.detach().item()
-        return train_loss, train_acc
+        return train_loss
 
     def fit(self, train_loader, validation=None, verbose=False):
         """
@@ -181,26 +198,35 @@ class Model:
         -------
 
         """
-        train_loss, train_acc = AverageMeter(), AverageMeter()
-        total_loss_train, total_acc_train, total_loss_test, total_acc_test = [], [], [], []
+        train_loss = AverageMeter()
+        total_loss_train, total_loss_test = [], []
         for e in range(self.epochs):
+            self.metric_reset()
+            train_loss.reset()
             for i, data in enumerate(train_loader):
-                loss, acc = self.train_on_batch(data[0], data[1])
-                train_acc.update(acc, data[0].size(0))
+                loss = self.train_on_batch(data[0], data[1])
                 train_loss.update(loss, data[0].size(0))
             if validation is not None:
-                loss, acc = self.evaluate(validation)
+                loss = self.evaluate(validation)
                 total_loss_test.append(loss)
-                total_acc_test.append(acc)
                 if verbose:
-                    print(
-                        f"Epoch {e + 1}: Train Loss= {train_loss.avg:.2f}, Train Accuracy= {train_acc.avg:.2f},"
-                        f" Test Loss= {loss:.2f}, Test Accuracy= {acc:0.2f}")
+                    train_logs = self.metrics_logs(train_loss.avg, epoch=e + 1)
+                    test_logs = self.metrics_logs(loss, train=False)
+                    print(f"{train_logs} {test_logs}")
             elif verbose:
-                print(f"Epoch {e + 1}: Loss= {train_loss.avg:.2f}, Accuracy={train_acc.avg:.2f}")
+                print(self.metrics_logs(train_loss.avg, epoch=e + 1))
             total_loss_train.append(train_loss.avg)
-            total_acc_train.append(train_acc.avg)
-        return total_loss_train, total_acc_train, total_loss_test, total_acc_test
+        return total_loss_train, total_loss_test
+
+    def metrics_logs(self, loss, epoch=None, train=True):
+        phase = "train" if train else "test"
+        msg = ""
+        if epoch is not None:
+            msg = f"Epoch {epoch}: "
+        msg = f"{msg}{phase}_loss: {loss:.4f}"
+        for name, metric in self.metrics.items():
+            msg = f"{msg} {phase}_{name}: {metric['AverageMeter'].avg:.4f}"
+        return msg
 
     def train_on_batches(self, train_loader, n_batches, verbose=False):
         """
