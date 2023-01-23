@@ -46,9 +46,49 @@ def get_dataloader(name):
 
 
 def get_metrics(name, package):
+    """ return the class of metrics that can be provided in one of the following ways:
+        1. supported metrics in torchmetrics
+        2. custom metrics that should be implemented in a similar fashion to torchmetrics
+            more info: https://torchmetrics.readthedocs.io/en/stable/pages/implement.html
+
+    Parameters
+    ----------
+    name: str
+        name of the metric
+         for torchmetrics, it should be the same importable name from torchmetrics
+    package: str
+        any torchmetrics' package that provides the metric. e.g., torchmetrics.classification
+
+    Returns
+    -------
+    torchmetrics.Metric
+
+    """
     return get_custom_module(module=name,
                              existing=importlib.import_module(package),
                              class_name='CustomMetric')
+
+
+def get_loss_func(name):
+    """ return the class of loss that can be provided in one of the following ways:
+        1. supported losses in torch.nn
+        2. custom loss that should be implemented as a class (methods are not supported)
+            more info: https://neptune.ai/blog/pytorch-loss-functions
+
+    Parameters
+    ----------
+    name: str
+        name of the loss function
+        for implemented loss functions in nn, it should be the same importable name from nn
+
+    Returns
+    -------
+    nn.Module: loss class
+
+    """
+    return get_custom_module(module=name,
+                             existing=nn,
+                             class_name='CustomLoss')
 
 
 def get_custom_module(module, existing, class_name=None):
