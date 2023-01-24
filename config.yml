@@ -10,6 +10,7 @@ fc_deep:
     detail:
       sep: ','
       label: "Group"
+    init_model: "model.pt"
 
   centralized: True
 

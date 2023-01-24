@@ -285,8 +285,11 @@ class Model:
     def get_optimizer_params(self):
         return self.optimizer.state_dict()
 
-    def store(self, path):
+    def store_model(self, path):
         torch.save(self.model.state_dict(), path)
+
+    def load_model(self, path):
+        self.model.load_state_dict(torch.load(path))
 
 
 class AverageMeter(object):
