@@ -18,10 +18,10 @@ class B1(Initialization):
         self.register_transition('Federated Simulation', role=Role.COORDINATOR, label="Local state transition")
 
     def run(self) -> str or None:
-        super().run()
-        if self.config.get("simulation", None) is not None:
+        transition = super().run()
+        if transition == 'simulation':
             return 'Federated Simulation'
-        if self.config.get('centralized', None) and len(self.clients) == 1 and self.coordinator:
+        if transition == 'centralized':
             return 'Centralized Training'
         return 'Local Update'
 
