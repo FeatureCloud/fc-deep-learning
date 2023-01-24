@@ -1,3 +1,4 @@
+import copy
 import os
 from abc import ABC
 import numpy as np
@@ -29,14 +30,18 @@ class Initialization(ConfigState.State, ABC):
         if self.config.get('simulation', None) is not None:
             self.update(message="Simulation mode")
             self.log("The app will run in the simulation mode...")
-            return ''
+            return 'simulation'
+
         dl = self.get_dataloader(self.load('input_files')['train'][0])
         self.get_custom_modules()
         data_cv_folds = zip(self.load('input_files')['train'], self.load('input_files')['test'])
         client_model, train_loaders, test_loaders = self.load_clients_data(data_cv_folds, dl)
-        if self.is_coordinator and self.config['local_dataset']['central_test'] is not None:
-            test_loader = dl.load(self.load('input_files')['central_test'][0], client_model.model.test_batch_size)
-            self.store('test_loader', test_loader)
+        if self.is_coordinator:
+            if self.config['local_dataset'].get('central_test', None) is not None:
+                test_loader = dl.load(self.load('input_files')['central_test'][0], client_model.model.test_batch_size)
+                self.store('test_loader', test_loader)
+            if self.config['local_dataset'].get('init_model', None) is not None:
+                client_model.load_model(self.load('input_files')['init_model'][0])
         self.store('n_splits', len(train_loaders))
         self.store('train_loaders', train_loaders)
         self.store('test_loaders', test_loaders)
@@ -44,6 +49,10 @@ class Initialization(ConfigState.State, ABC):
         self.store('smpc_used', self.config.get('use_smpc', False))
         self.store('iteration', 0)
         self.store('config', self.config)
+        if self.config.get('centralized', None) is not None:
+            self.update(message="Centralized training")
+            self.log("The app will run in the Centralized mode...")
+            return 'centralized'
         if self.is_coordinator and len(self.clients) > 1:
             data_to_send = [self.load('client_model').get_weights()]
             self.broadcast_data(data=data_to_send, send_to_self=False)
@@ -286,19 +295,25 @@ class WriteResults(AppState, ABC):
         if self.load('config')['result'].get('model', None) is not None:
             for counter, (model_file, weight) in enumerate(zip(dirs, weights)):
                 client_model.set_weights(weight)
-                client_model.store(model_file)
+                client_model.store_model(model_file)
 
 
-class Centralized(AppState, ABC):
+class Centralized(LocalUpdate, GlobalAggregation, WriteResults, ABC):
+    """
+    All the initializations steps were ran before entering centralized
+    """
+
     def run(self) -> str:
         central_test_loader = self.load('test_loader')
         client_model = self.load('client_model')
         train_loaders = self.load('train_loaders')
         test_loaders = self.load('test_loaders')
+        central_pred_file, central_target_file = get_path_to_central_test_output_files()
         n_splits = len(train_loaders)
         state_dict = [client_model.get_optimizer_params()] * n_splits
         weights = client_model.get_weights()
         client_model.model.epochs = self.load('config')['fed_hyper_params']["max_iter"]
+        trained_models = []
         for counter, (tr_dl, test_dl, sd) in enumerate(zip(train_loaders, test_loaders, state_dict)):
             self.log(f"Training model #{counter}")
             client_model.set_weights(weights)
@@ -306,6 +321,13 @@ class Centralized(AppState, ABC):
             client_model.model.fit(tr_dl, test_dl, verbose=True)
             if central_test_loader is not None:
                 client_model.model.evaluate(central_test_loader)
+            trained_models.append(client_model.get_weights())
+
+        self.write_central_test_results(client_model, central_test_loader, central_pred_file, central_target_file,
+                                        trained_models)
+        self.write_local_test_results(client_model, test_loaders, self.load('output_files')['pred'],
+                                      self.load('output_files')['target'], trained_models)
+        self.write_dnn_models(client_model, self.load('output_files')['model'], trained_models)
         self.update(message="Finished!")
 
 
@@ -357,11 +379,12 @@ class Simulation(Initialization, LocalUpdate, GlobalAggregation, WriteResults, A
                 # self.log(n_trained_samples)
                 # print(np.shape(new_parameters[0]))
                 new_params.append(list(zip(new_parameters, n_trained_samples)))
-            average_weights(new_params)
+            self.global_weights = average_weights(new_params)
             stopping_criteria = self.test_aggregated_models(self.global_weights, self.client_model)
             if stopping_criteria:
                 break
         self.write_results()
+        self.write_dnn_models(self.client_model, self.load('output_files')['model'], self.global_weights)
 
     def write_results(self):
         if self.config['local_dataset']['central_test'] is not None:
