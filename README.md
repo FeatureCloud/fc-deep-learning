@@ -197,6 +197,10 @@ Regarding the optional parameters' value, if not provided, the default value wil
 Also, for the loss function, users can determine it the same as the optimizer. 
 - name: 'CrossEntropyLoss'
 
+### Plugins
+The Deep learning app supports FeatureCloud plugins to cover specific functionalities. Using plugins, one can implement custom modules:
+* DataLoader
+* 
 ### Run deep learning app
 
 #### Prerequisite
