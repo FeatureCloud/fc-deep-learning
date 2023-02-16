@@ -15,6 +15,7 @@ import bios
 import os
 import shutil
 from FeatureCloud.app.engine.app import AppState, LogLevel
+from utils.utils import get_root_path
 
 
 class State(AppState):
@@ -30,10 +31,10 @@ class State(AppState):
         config.yml file can contain configs for more than one Utils.
     input_dir: str
         path to directory inside the Utils's docker container for input files
-        Default: `/mnt/input`
+        Default: `mnt/input`
     output_dir: str
         path to directory inside the Utils's docker container for output files
-        Default: `/mnt/output`
+        Default: `mnt/output`
     config_file: str
         the path to `config.yml` file inside the input directory
     mode: str
@@ -50,7 +51,7 @@ class State(AppState):
     finalize_config()
     """
 
-    def __init__(self, app_name, input_dir: str = "/mnt/input", output_dir: str = "/mnt/output"):
+    def __init__(self, app_name, input_dir: str = get_root_path(), output_dir: str = get_root_path(input=False)):
         self.config = {}
         self.input_dir = input_dir
         self.output_dir = output_dir

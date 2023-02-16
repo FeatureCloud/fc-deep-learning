@@ -21,9 +21,23 @@ import torch.nn as nn
 from models.pytorch import models
 import importlib.util
 import sys
+import os
 from utils.pytorch import DataLoader as SupportedLoaders
 from itertools import compress
 import torch.optim as optim
+
+
+def is_native():
+    path_prefix = os.getenv("PATH_PREFIX")
+    if path_prefix:
+        return False
+    return True
+
+
+def get_root_path(input=True):
+    if input:
+        return f"mnt/input"
+    return f"mnt/output"
 
 
 def get_dataloader(name):
@@ -136,7 +150,7 @@ def get_custom_module(module, existing, class_name=None):
         return getattr(existing, module)
     if '.py' in module:
         dl = f"{module.split('.')[0]}.{class_name}"
-        spec = importlib.util.spec_from_file_location(dl, f"/mnt/input/{module}")
+        spec = importlib.util.spec_from_file_location(dl, f"{get_root_path()}/{module}")
         foo = importlib.util.module_from_spec(spec)
         sys.modules["module.name"] = foo
         spec.loader.exec_module(foo)
@@ -245,14 +259,15 @@ def average_weights(params):
 
 
 def inject_root_path_to_clients_dir(client_dir, dirs, input=True):
-    root_dir = f"/mnt/{'input' if input else 'output'}"
+    # root_dir = f"{get_root_path(input)}/mnt/{'input' if input else 'output'}"
+    root_dir = get_root_path(input)
     injected_dirs = [d.replace(root_dir, f"{root_dir}/{client_dir}") for d in dirs]
     return injected_dirs
 
 
 def get_path_to_central_test_output_files():
-    central_pred_file = "/mnt/output/central_pred.csv"
-    central_target_file = "/mnt/output/central_target.csv"
+    central_pred_file = f"{get_root_path(input=False)}/central_pred.csv"
+    central_target_file = "get_root_path(input=False)/central_target.csv"
     return central_pred_file, central_target_file
 
 

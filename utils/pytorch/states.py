@@ -7,7 +7,7 @@ from FeatureCloud.app.engine.app import State as op_state
 from CustomStates import ConfigState
 from utils.utils import design_model, get_dataloader, to_list, to_numpy, average_weights, \
     inject_root_path_to_clients_dir, get_path_to_central_test_output_files, remove_converged_models, get_metrics, \
-    get_loss_func, get_optimizer
+    get_loss_func, get_optimizer, get_root_path
 from utils.pytorch.DeepModel import Model
 from utils.pytorch.ClientModels import ClientModels
 import pandas as pd
@@ -98,7 +98,7 @@ class Initialization(ConfigState.State, ABC):
         dl_class = get_dataloader(self.config['train_config']['data_loader'])
         if dl_class is None:
             self.log(f"module {self.config['train_config']['data_loader']} neither is found in implemented models nor "
-                     f"in `/mnt/input` directory", LogLevel.ERROR)
+                     f"in `{get_root_path()}` directory", LogLevel.ERROR)
             self.update(message="module not found", state=op_state.ERROR)
         dl = dl_class(sample_train_set, **self.config['local_dataset']['detail'])
         return dl
@@ -395,7 +395,7 @@ class Simulation(Initialization, LocalUpdate, GlobalAggregation, WriteResults, A
             self.write_central_test_results(self.client_model, self.central_test_loader, pred_file, target_file)
 
         for client, dir in enumerate(self.clients_dirs):
-            os.mkdir(f"/mnt/output/{dir}")
+            os.mkdir(f"{get_root_path()}/{dir}")
             pred_files = inject_root_path_to_clients_dir(dir, self.load('output_files')['pred'], input=False)
             target_files = inject_root_path_to_clients_dir(dir, self.load('output_files')['target'], input=False)
             self.write_local_test_results(self.client_model,

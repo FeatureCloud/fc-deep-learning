@@ -1,4 +1,5 @@
 .idea/
+mnt/*
 venv
 test/__pycache__/
 Utils/__pycache__/
