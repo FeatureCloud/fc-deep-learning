@@ -16,12 +16,14 @@
     limitations under the License.
 
 """
-import torch.optim as optim
 import torch
 import numpy as np
+import abc
+from utils.pytorch.utils import LocalUpdates, Metrics
+from utils.utils import to_numpy
 
 
-class Model:
+class Trainer(abc.ABC):
     """ Deep Convolutional Network
     Attributes
     ----------
@@ -48,7 +50,7 @@ class Model:
 
     """
 
-    def __init__(self, model, config, attributes, device):
+    def __init__(self, model, config, attributes, train_config, req_local_updates, log):
         """
 
         Parameters
@@ -59,16 +61,14 @@ class Model:
         attributes: dict
             arguments for DeepModel
         """
+        self.log = log
+        metrics = attributes.pop('metrics')
+        self.metrics = Metrics(metrics)
+        self.train_metrics_hist, self.test_metrics_hist = [], []
 
-        self.metrics = {}
-        self.metrics_initialize(attributes.pop('metrics'))
-
-        # Set attributes for Model:
-        # batch_size
-        # epochs
-        for k, v in attributes.items():
+        for k, v in train_config.items():
             setattr(self, k, v)
-        self.device = device
+
         self.model = model(**config)
         self.model.to(device=self.device)
 
@@ -85,12 +85,8 @@ class Model:
         opt_param.update({'params': self.model.parameters()})
         self.optimizer = opt_func(**opt_param)
 
-    def metrics_initialize(self, metric_classes):
-        for metric in metric_classes:
-            m = {'func': metric['func'](**metric.get('param', {})),
-                 'AverageMeter': AverageMeter()
-                 }
-            self.metrics[metric['name']] = m
+        self.req_local_updates = req_local_updates
+        self.n_trained_samples = None
 
     def get_module(self, module_class, module, params, to_device=False):
         mod = getattr(module_class, module)(**params)
@@ -113,7 +109,8 @@ class Model:
         acc : float
             running accuracy
         """
-        test_loss = AverageMeter()
+
+        self.metrics.reset()
         self.model.eval()
         with torch.no_grad():
             for data, target in dl:
@@ -121,19 +118,9 @@ class Model:
                 target = target.to(device=self.device)
                 pred = self.model(data)
                 loss = self.loss_func(pred, target)
-                self.metric_performance(pred, target)
-                test_loss.update(loss.item(), data.size(0))
+                self.metrics.perform(pred, target, loss.item())
+
         self.model.train()
-        return test_loss.avg
-
-    def metric_performance(self, pred, target):
-        for name, metric in self.metrics.items():
-            perf = metric['func'](pred, target)
-            metric['AverageMeter'].update(perf)
-
-    def metric_reset(self):
-        for metric in self.metrics.values():
-            metric['AverageMeter'].reset()
 
     def predict(self, dl):
         """ evaluate the network's performances in terms of loss and accuracy
@@ -164,6 +151,7 @@ class Model:
         self.model.train()
         return np.array(prediction, dtype='int'), np.array(y_true, dtype='int')
 
+    @abc.abstractmethod
     def train_on_batch(self, data, targets):
         """ train the network on entire data in one pass
 
@@ -175,21 +163,14 @@ class Model:
             labels of the image samples
 
         """
-        data, targets = data.to(self.device), targets.to(self.device)
-        pred = self.model(data)
-        loss = self.loss_func(pred, targets)
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-        self.metric_performance(pred, targets)
-        train_loss = loss.detach().item()
-        return train_loss
 
-    def fit(self, train_loader, validation=None, verbose=False):
+    @abc.abstractmethod
+    def fit(self, train_loader, validation=None, train_config=None, **kwargs):
         """
 
         Parameters
         ----------
+        train_config
         train_loader
         validation
         verbose
@@ -198,62 +179,15 @@ class Model:
         -------
 
         """
-        train_loss = AverageMeter()
-        total_loss_train, total_loss_test = [], []
-        for e in range(self.epochs):
-            self.metric_reset()
-            train_loss.reset()
-            for i, data in enumerate(train_loader):
-                loss = self.train_on_batch(data[0], data[1])
-                train_loss.update(loss, data[0].size(0))
-            if validation is not None:
-                loss = self.evaluate(validation)
-                total_loss_test.append(loss)
-                if verbose:
-                    train_logs = self.metrics_logs(train_loss.avg, epoch=e + 1)
-                    test_logs = self.metrics_logs(loss, train=False)
-                    print(f"{train_logs} {test_logs}")
-            elif verbose:
-                print(self.metrics_logs(train_loss.avg, epoch=e + 1))
-            total_loss_train.append(train_loss.avg)
-        return total_loss_train, total_loss_test
 
-    def metrics_logs(self, loss, epoch=None, train=True):
-        phase = "train" if train else "test"
-        msg = ""
-        if epoch is not None:
-            msg = f"Epoch {epoch}: "
-        msg = f"{msg}{phase}_loss: {loss:.4f}"
-        for name, metric in self.metrics.items():
-            msg = f"{msg} {phase}_{name}: {metric['AverageMeter'].avg:.4f}"
-        return msg
-
-    def train_on_batches(self, train_loader, n_batches, verbose=False):
-        """
-
-        Parameters
-        ----------
-        train_loader:  DataLoader
-            Custom data loader
-        n_batches: int
-        verbose: bool
-
-        Returns
-        -------
-
-        """
-        train_loss, train_acc = AverageMeter(), AverageMeter()
-        n_trained_samples = 0
-        for i, (data, target) in enumerate(train_loader):
-            loss, acc = self.train_on_batch(data, target)
-            train_acc.update(acc, data[0].size(0))
-            train_loss.update(loss, data[0].size(0))
-            n_trained_samples += len(data)
-            if i == n_batches - 1:
-                break
-        if verbose:
-            print(f"Loss= {train_loss.avg:.2f}, Accuracy={train_acc.avg:.2f}")
-        return train_loss.avg, train_acc.avg, n_trained_samples
+    def per_epoch_validation(self, validation, epoch):
+        if validation is not None:
+            self.evaluate(validation)
+            if self.verbose:
+                logs = self.metrics.logs(epoch=epoch, train=False)
+                self.log(logs)
+        elif self.verbose:
+            self.log(self.metrics.logs(epoch=epoch))
 
     def get_weights(self):
         """ Call get_weights method of CNN or MLP classes
@@ -276,8 +210,31 @@ class Model:
         """
         with torch.no_grad():
             for i, (name, param) in enumerate(self.model.named_parameters()):
-                p = w[i] if isinstance(w[i], np.ndarray) else np.array(w[i], dtype='float32')
+                # p = w[i] if isinstance(w[i], np.ndarray) else np.array(w[i], dtype='float32')
+                # p = to_numpy(w[i], skip_obj_dtype=True)
+                p = to_numpy(w[i])
+                # print(p.dtype)
                 param.data = torch.from_numpy(p).to(device=self.device)
+
+    def get_gradients(self):
+        # TODO
+        pass
+
+    def set_global_updates(self, updates):
+        """ Call set_weights method of CNN or MLP classes
+
+        Parameters
+        ----------
+        updates : numpy.array
+            networks weights with arbitrary dimensions
+
+        """
+
+    def local_backup(self):
+        backup = [
+            self.model.getoptimizer_params(),
+        ]
+        return backup
 
     def set_optimizer_params(self, param):
         self.optimizer.load_state_dict(param)
@@ -292,21 +249,54 @@ class Model:
         self.model.load_state_dict(torch.load(path))
 
 
-class AverageMeter(object):
-    def __init__(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
+class BasicTrainer(Trainer):
+    def __init__(self, **kwargs):
+        super(BasicTrainer, self).__init__(**kwargs)
+        self.n_trained_samples = 0
 
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
+    def train_on_batch(self, data, targets):
+        """ train the network on entire data in one pass
 
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
+        Parameters
+        ----------
+        data : numpy.ndarray
+            image samples
+        targets : numpy.array
+            labels of the image samples
+
+        """
+        data, targets = data.to(self.device), targets.to(self.device)
+        pred = self.model(data)
+        loss = self.loss_func(pred, targets)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        self.metrics.perform(pred, targets, loss.item())
+
+    def apply_grads(self, grads):
+        self.optimizer.zero_grad()
+        for p, g in zip(self.model.parameters(), grads):
+            p.grad = g
+        self.optimizer.step()
+
+    def fit(self, train_loader, validation=None, train_config=None):
+        """
+
+        Parameters
+        ----------
+        train_config
+        train_loader
+        validation
+        verbose
+
+        Returns
+        -------
+
+        """
+        for e in range(self.epochs):
+            self.metrics.reset()
+            for i, data in enumerate(train_loader):
+                self.train_on_batch(data[0], data[1])
+            self.log(self.metrics.logs(epoch=e))
+            self.per_epoch_validation(validation, e + 1)
+        self.n_trained_samples = len(train_loader)
