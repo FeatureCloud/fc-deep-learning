@@ -18,13 +18,21 @@
 """
 import numpy as np
 import torch.nn as nn
+import torch
 from models.pytorch import models
 import importlib.util
+import importlib
 import sys
 import os
-from utils.pytorch import DataLoader as SupportedLoaders
+# from utils.pytorch import DataLoader as SupportedLoaders
 from itertools import compress
 import torch.optim as optim
+# from utils.pytorch import optimizer as SupportedAggregators
+# from utils.pytorch import DeepModel
+from utils import pytorch
+
+def set_device(device):
+    return torch.device('cuda' if torch.cuda.is_available() and device.lower() == 'gpu' else 'cpu')
 
 
 def is_native():
@@ -38,6 +46,30 @@ def get_root_path(input=True):
     if input:
         return f"mnt/input"
     return f"mnt/output"
+
+
+def get_trainer(name):
+    return get_custom_module(module=name,
+                             existing=importlib.import_module('utils.pytorch.DeepModel'),
+                             class_name='CustomTrainer')
+
+
+def get_aggregator(name):
+    """
+
+    Parameters
+    ----------
+    name: str
+        The name of the aggregator
+
+    Returns
+    -------
+
+
+    """
+    return get_custom_module(module=name,
+                             existing=importlib.import_module('utils.pytorch.optimizer'),
+                             class_name='CustomAggregator')
 
 
 def get_dataloader(name):
@@ -57,7 +89,9 @@ def get_dataloader(name):
     -------
 
     """
-    return get_custom_module(module=name, existing=SupportedLoaders, class_name='CustomDataLoader')
+    return get_custom_module(module=name,
+                             existing=importlib.import_module('utils.pytorch.DataLoader'),
+                             class_name='CustomDataLoader')
 
 
 def get_metrics(name, package):
@@ -158,7 +192,7 @@ def get_custom_module(module, existing, class_name=None):
     return None
 
 
-def design_model(config, data_loader):
+def design_architecture(config, data_loader):
     if 'name' in config:
         name = config.pop('name')
         return lambda: get_custom_module(module=name, existing=models, class_name='Model')(**config), {}
@@ -228,17 +262,20 @@ def to_list(np_array):
     return lst_arr
 
 
-def to_numpy(lst):
+def to_numpy(lst, dtype='float32', skip_obj_dtype=False):
     if isinstance(lst, list):
         np_arr = []
         for item in lst:
             np_item = item
             if isinstance(item, list):
-                np_item = to_numpy(item)
+                np_item = to_numpy(item, dtype, skip_obj_dtype)
             np_arr.append(np_item)
         try:
-            return np.array(np_arr, dtype='float32')
+            return np.array(np_arr, dtype=dtype)
         except:
+            print("here")
+            if skip_obj_dtype:
+                return np_arr
             return np.array(np_arr, dtype='object')
     return lst
 
@@ -271,10 +308,91 @@ def get_path_to_central_test_output_files():
     return central_pred_file, central_target_file
 
 
-def remove_converged_models(weights, state_dict, train_loaders, test_loaders, converged):
+def remove_converged_models(update_dict, backup, train_loaders, test_loaders):
+    converged = update_dict['stoppage']
     if any(converged):
-        weights = list(compress(weights, converged))
-        state_dict = list(compress(state_dict, converged))
+        update_dict = {k: list(compress(w, converged)) for k, w in update_dict.items()}
+        backup = list(compress(backup, converged))
         train_loaders = list(compress(train_loaders, converged))
         test_loaders = list(compress(test_loaders, converged))
-    return weights, state_dict, train_loaders, test_loaders
+    return update_dict, backup, train_loaders, test_loaders
+
+
+def unpack(global_updates, update_schema):
+    weight, gradient, config, stoppage, cv = update_schema
+    updates = ['weights', 'gradient', 'config', 'stoppage']
+    g_weight, g_gradient, g_config, g_stoppage = None, None, None, None
+
+    if weight:
+        if config & stoppage:
+            g_weight, g_config, g_stoppage = global_updates
+        if config:
+            g_weight, g_config = global_updates
+        elif stoppage:
+            g_weight, g_stoppage = global_updates
+    elif gradient:
+        if config & stoppage:
+            g_gradient, g_config, g_stoppage = global_updates
+        elif config:
+            g_gradient, g_config = global_updates
+        else:
+            g_gradient, g_stoppage = global_updates
+    return dict(zip(updates, [g_weight, g_gradient, g_config, g_stoppage]))
+
+
+def interpret_global_updates(global_updates, update_schema):
+    weight, gradient, config, stoppage, cv = update_schema
+    expected_elements = [weight, gradient, config]
+    expected_numl = sum(expected_elements)
+    n_upd_elments = len(global_updates)
+    if expected_numl > 1:
+        assert n_upd_elments == expected_numl, f"Not the same number of elements in the global updates:" \
+                                               f" Expected: {expected_numl}({expected_elements}) <> " \
+                                               f"number of update elements: {n_upd_elments}:"
+
+    if cv:
+        cv_len = [len(u_elm) for u_elm in global_updates]
+        cv_folds = sum(cv_len) // len(cv_len)
+        assert all([l == cv_folds for l in cv_len]), f"Not all elements have the same cv fold: {cv_folds}"
+
+
+def cv_first(updates):
+
+    if updates['weights'] is not None:
+        n_folds = len(updates['weights'])
+    else:
+        n_folds = len(updates['gradients'])
+
+    transposed = [{} for _ in range(n_folds)]
+    if updates.get('weights', None) is None:
+        for i in range(n_folds):
+            transposed[i]['weights'] = None
+    else:
+        for i, p in enumerate(updates['weights']):
+            transposed[i]['weights'] = p
+    if updates.get('gradients', None) is None:
+        for i in range(n_folds):
+            transposed[i]['gradients'] = None
+    else:
+        for i, p in enumerate(updates['gradients']):
+            transposed[i]['gradients'] = p
+
+    if updates.get('config', None) is None:
+        for i in range(n_folds):
+            transposed[i]['config'] = None
+    else:
+        if len(updates['config']) == n_folds:
+            for i, c in enumerate(updates['config']):
+                transposed[i]['config'] = c
+        else:
+            for i in range(n_folds):
+                transposed[i]['config'] = updates['config']
+
+    if updates.get('stoppage', None) is None:
+        for i in range(n_folds):
+            transposed[i]['stoppage'] = None
+    else:
+        for i, s in enumerate(updates['stoppage']):
+            transposed[i]['stoppage'] = s
+
+    return transposed
