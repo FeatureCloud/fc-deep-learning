@@ -47,7 +47,7 @@ class ClientModels:
 
     """
 
-    def __init__(self, model, train_all, batch_count):
+    def __init__(self, model, aggregator=None):
         """
         Parameters
         ----------
@@ -56,11 +56,10 @@ class ClientModels:
         batch_count:
         """
         self.model = model
-        self.train_all = train_all
-        self.batch_count = batch_count
+        self.aggregator = aggregator
         self.num_trained_samples = 0
 
-    def update(self, data_loader, weights, state_dict, verbose=False):
+    def update(self, data_loader, global_updates, backup, test_loader):
         """update client's model for all of its data for E epochs
             and decreases the learning rate of DNN.
 
@@ -68,20 +67,36 @@ class ClientModels:
         ----------
         data_loader: DataLoader
             Custom data loader
-        weights : list
+        global_updates : list
             weights of Deep Neural Network
-        state_dict: dict
+        backup: dict
             Pytorch Optimizers Parameters
         verbose: bool
             printing an evaluation report
         """
-        self.model.set_weights(weights)
-        self.model.set_optimizer_params(state_dict)
-        if self.train_all:
-            self.model.fit(data_loader, verbose=verbose)
-            self.num_trained_samples = len(data_loader)
-        else:
-            _, _, self.num_trained_samples = self.model.train_on_batches(data_loader, self.batch_count, verbose)
+        # global_updates = self.interpret_global_updates(global_updates)
+        self.model.set_weights(global_updates['weights'])
+        self.model.set_optimizer_params(backup)
+
+        self.model.fit(data_loader, test_loader, global_updates['config'], **{})
+
+    def get_local_updates(self, l_update_schema):
+        """ Get the local parameters, n_samples, etc. that are needed by the aggregator
+
+        """
+
+        weights, gradients, n_samples, cross_validation = l_update_schema
+        local_updates = []
+        if weights:
+            local_updates.append(self.model.get_weights())
+        if gradients:
+            local_updates.append(self.model.get_gradients())
+        if n_samples:
+            local_updates.append(self.model.n_trained_samples)
+        return local_updates
+
+    def local_backup(self):
+        return self.get_optimizer_params()
 
     def get_weights(self):
         """ get model's weights
@@ -116,7 +131,9 @@ class ClientModels:
         loss_and_accuracy: list
 
         """
-        return self.model.evaluate(test_loader)
+        self.model.evaluate(test_loader)
+        self.model.metrics.logs(train=False)
+        return self.model.metrics.dict()
 
     def predict(self, test_loader=None):
         """ Calls model's predict method
