@@ -23,7 +23,7 @@ fc_deep:
     mode: "directory"
     dir: "data"
 
-  gpu: True # True or False
+
   result:
     pred: "y_pred.csv"
     target: "y_test.csv"
@@ -31,26 +31,29 @@ fc_deep:
 
 
   fed_hyper_params:
-    max_iter: 10
+    max_iter: 1
     n_classes: 10
-    federated_model: 'FedAVG'
-    batch_count: 1
+    federated_model: 'FedAvg.py'
+    global_updates: WEIGHTS_STOPPING
+    param: { }
+
+
+
 
   use_smpc: True
 
-
-  train_config:
+  trainer:
+    name: 'FedMMB.py'
+    param: {}
+    local_update: WEIGHTS_N_SAMPLES
     data_loader: ImageLoader # True: using torchvision Dataloader, False using custom Dataloader
-    batch_size: 32
-    test_batch_size: 32
-    epochs: 1
     optimizer:
       name: 'SGD'
       param:
         lr: 0.1
     loss:
       name: 'focal_loss.py'
-#      param: null
+      #      param: null
       param:
         alpha:
           - 0.2
@@ -64,7 +67,18 @@ fc_deep:
         param:
           task: 'multiclass'
           num_classes: 4
-#      - name: 'RMSE'
+
+  train_config:
+    verbose: False
+    batch_size: 32
+    test_batch_size: 32
+    epochs: 1
+    lr: 0.1
+    batch_count: 1
+    device: gpu # options{gpu, cpu}
+
+
+  #      - name: 'RMSE'
 #        params: null
 
 
