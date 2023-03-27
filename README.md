@@ -200,7 +200,6 @@ Also, for the loss function, users can determine it the same as the optimizer.
 ### Plugins
 The Deep learning app supports FeatureCloud plugins to cover specific functionalities. Using plugins, one can implement custom modules:
 * DataLoader
-* 
 ### Run deep learning app
 
 #### Prerequisite
