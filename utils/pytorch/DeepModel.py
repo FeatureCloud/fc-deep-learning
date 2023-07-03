@@ -215,7 +215,10 @@ class Trainer(abc.ABC):
             networks weights with arbitrary dimensions
 
         """
-        print(len(w))
+        if len(w) == 1:
+            print(len(w[0]))
+        else:
+            print(len(w))
         with torch.no_grad():
             for i, (name, param) in enumerate(self.model.named_parameters()):
                 print(np.shape(w[i]))
