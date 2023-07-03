@@ -221,7 +221,8 @@ class Trainer(abc.ABC):
             print(len(w))
         with torch.no_grad():
             for i, (name, param) in enumerate(self.model.named_parameters()):
-                print(np.shape(w[i]))
+                print(len(w[i]))
+                # print(np.shape(w[i]))
                 # p = w[i] if isinstance(w[i], np.ndarray) else np.array(w[i], dtype='float32')
                 # p = to_numpy(w[i], skip_obj_dtype=True)
                 p = to_numpy(w[i])
