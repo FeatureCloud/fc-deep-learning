@@ -30,8 +30,9 @@ import torch.optim as optim
 
 def find_gpu_instances():
     num_gpus = torch.cuda.device_count()
+    print(f"Number of GPUs: {num_gpus}")
     for i in range(num_gpus):
-        yield torch.device(f"cuda:{i}")
+        yield torch.cuda.get_device_name(i)
 
 def set_device(device):
     if torch.cuda.is_available() and device.lower() == 'gpu':
