@@ -215,14 +215,16 @@ class Trainer(abc.ABC):
             networks weights with arbitrary dimensions
 
         """
+        print(np.shape[w])
         with torch.no_grad():
             for i, (name, param) in enumerate(self.model.named_parameters()):
+                print(np.shape(w[i]))
                 # p = w[i] if isinstance(w[i], np.ndarray) else np.array(w[i], dtype='float32')
                 # p = to_numpy(w[i], skip_obj_dtype=True)
-                p = to_numpy(w[i], skip_obj_dtype=True)
+                p = to_numpy(w[i])
                 # print(p.dtype)
-                pdb.set_trace()
-                param.data = torch.Tensor(p).to(device=self.device)
+                # pdb.set_trace()
+                param.data = torch.from_numpy(p).to(device=self.device)
 
     def get_gradients(self):
         # TODO
