@@ -231,7 +231,7 @@ class Trainer(abc.ABC):
                 # print(p.dtype)
                 # pdb.set_trace()
                 if p.dtype == object:
-                    param.data = torch.tensor(to_list(p)).to(device=self.device)
+                    param.data = torch.tensor(w[i]).to(device=self.device)
                     # tensor_list = []
                     # for obj in p:
                     #     tensor_list.append(torch.tensor(obj))
