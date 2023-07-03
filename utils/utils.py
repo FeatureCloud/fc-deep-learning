@@ -28,15 +28,17 @@ from itertools import compress
 import torch.optim as optim
 
 
-def device_generator():
-    if torch.cuda.is_available():
+def device_generator(device):
+    if torch.cuda.is_available() and device.strip().lower() == 'gpu':
         for i in range(torch.cuda.device_count()):
             yield torch.device(f"cuda:{i}")
     yield torch.device("cpu")
 
 
 def set_device(device):
-    return next(device_generator())
+    device = next(device_generator(device))
+    print(f"Assigned device: {device}")
+    return device
 
     # return torch.device('cuda' if torch.cuda.is_available() and device.lower() == 'gpu' else 'cpu')
 
