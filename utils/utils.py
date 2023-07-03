@@ -27,8 +27,17 @@ import os
 from itertools import compress
 import torch.optim as optim
 
+
+def find_gpu_instances():
+    num_gpus = torch.cuda.device_count()
+    for i in range(num_gpus):
+        yield torch.device(f"cuda:{i}")
+
 def set_device(device):
-    return torch.device('cuda' if torch.cuda.is_available() and device.lower() == 'gpu' else 'cpu')
+    if torch.cuda.is_available() and device.lower() == 'gpu':
+        return find_gpu_instances()
+    return torch.device('cpu')
+    # return torch.device('cuda' if torch.cuda.is_available() and device.lower() == 'gpu' else 'cpu')
 
 
 def is_native():
