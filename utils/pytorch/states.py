@@ -243,9 +243,7 @@ class GlobalAggregation(AppState, ABC):
         self.broadcast_data(data_to_send, send_to_self=False)
         global_update_dict, converged = self.all_converged(data_to_send)
         if converged:
-            print(len(global_update_dict['weights']))
-            print(len(global_update_dict['weights'][0]))
-            self.store('weights', global_update_dict['weights'])
+            self.store('weights', global_update_dict['weights'][0])
             return "Converged"
 
     def all_converged(self, data_to_send):
