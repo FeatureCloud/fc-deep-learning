@@ -21,7 +21,7 @@ import numpy as np
 import abc
 from utils.pytorch.utils import LocalUpdates, Metrics
 from utils.utils import to_numpy
-
+import pdb
 
 class Trainer(abc.ABC):
     """ Deep Convolutional Network
@@ -221,7 +221,8 @@ class Trainer(abc.ABC):
                 # p = to_numpy(w[i], skip_obj_dtype=True)
                 p = to_numpy(w[i], skip_obj_dtype=True)
                 # print(p.dtype)
-                param.data = torch.FloatTensor(p).to(device=self.device)
+                pdb.set_trace()
+                param.data = torch.Tensor(p).to(device=self.device)
 
     def get_gradients(self):
         # TODO
