@@ -221,7 +221,7 @@ class Trainer(abc.ABC):
                 # p = to_numpy(w[i], skip_obj_dtype=True)
                 p = to_numpy(w[i], skip_obj_dtype=True)
                 # print(p.dtype)
-                param.data = torch.from_numpy(p).to(device=self.device)
+                param.data = torch.FloatTensor(p).to(device=self.device)
 
     def get_gradients(self):
         # TODO
