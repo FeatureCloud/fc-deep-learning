@@ -230,7 +230,7 @@ class Trainer(abc.ABC):
                 # print(p.dtype)
                 # pdb.set_trace()
                 if isinstance(p, list):
-                    param.data = torch.FloatTensor(p).to(device=self.device)
+                    param.data = torch.Tensor(p).to(device=self.device)
                 else:
                     param.data = torch.from_numpy(p).to(device=self.device)
 
