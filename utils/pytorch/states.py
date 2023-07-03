@@ -70,7 +70,8 @@ class ExtendedConfigState(ConfigState.State, ABC):
         return dl
 
     def build_client_model(self, data_loader):
-        self.config['train_config']['device'] = utils.set_device(self.config['train_config']['device'])
+        gpu = self.config['train_config']['device'].strip().lower() == "gpu"
+        self.config['train_config']['device'] = utils.set_device(self.device, gpu)
         dnn_architecture, dnn_config = utils.design_architecture(deepcopy(self.config['model']), data_loader,
                                                                  self.input_dir)
         local_trainer = utils.get_trainer(self.config['trainer']['name'], self.input_dir)

@@ -18,6 +18,8 @@ import ast
 import abc
 from time import sleep
 from FeatureCloud.app.engine.app import App, app
+
+import utils.utils
 from states import generate_centralized_states, generate_federated_states
 from bottle import Bottle
 from FeatureCloud.app.api.http_ctrl import api_server
@@ -192,13 +194,20 @@ class Controller:
 
 
 def simulate():
+    available_devices = utils.utils.list_devices()
     clients_dirs = get_clients_dirs()
     clients_ids = get_clients_ids()
+    if available_devices is None:
+        available_devices = [utils.utils.get_cpu_device()] * len(clients_ids)
+    if len(available_devices) < len(clients_ids):
+        for _ in range(len(clients_ids) - len(available_devices)):
+            available_devices.append(utils.utils.get_cpu_device())
     controller = Controller(clients_ids)
-    for i, (client_id, client_dir) in enumerate(zip(clients_ids, clients_dirs)):
+    for i, (client_id, client_dir, device) in enumerate(zip(clients_ids, clients_dirs, available_devices)):
         app = App()
         kwargs = {"input_dir": client_dir,
-                  "output_dir": client_dir.replace("/input/", "/output/")}
+                  "output_dir": client_dir.replace("/input/", "/output/"),
+                  "device": device}
         app = generate_federated_states(app, **kwargs)
         controller.register(client_id, app, coordinator=i == 0)
     controller.run()

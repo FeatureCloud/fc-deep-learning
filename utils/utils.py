@@ -28,17 +28,19 @@ from itertools import compress
 import torch.optim as optim
 
 
-def device_generator():
-    for i in range(torch.cuda.device_count()):
-        yield torch.device(f"cuda:{i}")
+def list_devices():
+    if torch.cuda.is_available():
+        return [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
 
 
-devices = device_generator()
-def set_device(device):
-    if torch.cuda.is_available() and device.strip().lower() == 'gpu':
-        return next(devices)
+def get_cpu_device():
     return torch.device("cpu")
 
+
+def set_device(device: torch.device, gpu: bool):
+    if gpu:
+        return device
+    return torch.device("cpu")
 
 
 def is_native():
@@ -208,7 +210,8 @@ def get_custom_module(module, existing, root_dir, class_name=None):
 def design_architecture(config, data_loader, root_dir):
     if 'name' in config:
         name = config.pop('name')
-        return lambda: get_custom_module(module=name, existing=models, class_name='Model', root_dir=root_dir)(**config), {}
+        return lambda: get_custom_module(module=name, existing=models, class_name='Model', root_dir=root_dir)(
+            **config), {}
     sample_data = next(iter(data_loader))[0]
     layer_default = {}
     layers = []
@@ -370,7 +373,6 @@ def interpret_global_updates(global_updates, update_schema):
 
 
 def cv_first(updates):
-
     if updates['weights'] is not None:
         n_folds = len(updates['weights'])
     else:

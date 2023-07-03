@@ -50,7 +50,7 @@ class State(AppState):
     """
 
     # def __init__(self, app_name, input_dir: str, output_dir: str):
-    def __init__(self, app_name, input_dir, output_dir):
+    def __init__(self, app_name, input_dir, output_dir, device):
 
         self.config = {}
         self.input_dir = input_dir
@@ -59,6 +59,7 @@ class State(AppState):
         self.mode = 'file'
         self.dir = '.'
         self.app_name = app_name
+        self.device = device
 
 
     # def initialize(self, app_name, input_dir: str, output_dir: str):
