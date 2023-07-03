@@ -225,12 +225,14 @@ class Trainer(abc.ABC):
                 # print(np.shape(w[i]))
                 # p = w[i] if isinstance(w[i], np.ndarray) else np.array(w[i], dtype='float32')
                 # p = to_numpy(w[i], skip_obj_dtype=True)
-                p = to_numpy(w[i], skip_obj_dtype=True)
+                p = to_numpy(w[i])
                 # print(p.dtype)
                 # print(p.dtype)
                 # pdb.set_trace()
-                if isinstance(p, list):
-                    param.data = torch.Tensor(p).to(device=self.device)
+                if p.dtype == np.object:
+                    tensor_list = [torch.tensor(obj) for obj in p]
+                    param.data = torch.stack(tensor_list).to(device=self.device)
+                    # param.data = torch.Tensor(p).to(device=self.device)
                 else:
                     param.data = torch.from_numpy(p).to(device=self.device)
 
