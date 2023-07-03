@@ -225,7 +225,7 @@ class Trainer(abc.ABC):
                 # print(np.shape(w[i]))
                 # p = w[i] if isinstance(w[i], np.ndarray) else np.array(w[i], dtype='float32')
                 # p = to_numpy(w[i], skip_obj_dtype=True)
-                p = to_numpy(w[i])
+                p = to_numpy(w[i], skip_obj_dtype=True)
                 print(p.dtype)
                 # print(p.dtype)
                 # pdb.set_trace()
