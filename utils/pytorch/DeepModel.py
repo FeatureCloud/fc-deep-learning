@@ -61,13 +61,15 @@ class Trainer(abc.ABC):
         attributes: dict
             arguments for DeepModel
         """
-        self.log = log
-        metrics = attributes.pop('metrics')
-        self.metrics = Metrics(metrics)
-        self.train_metrics_hist, self.test_metrics_hist = [], []
-
         for k, v in train_config.items():
             setattr(self, k, v)
+
+        self.log = log
+        metrics = attributes.pop('metrics')
+        self.metrics = Metrics(metrics, self.device)
+        self.train_metrics_hist, self.test_metrics_hist = [], []
+
+
         self.model = model(**config)
         self.model.to(device=self.device)
 

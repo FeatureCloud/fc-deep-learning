@@ -45,8 +45,9 @@ class GlobalUpdates(Enum):
 
 
 class Metrics:
-    def __init__(self, metric_classes):
+    def __init__(self, metric_classes, device):
         self.metric_classes = metric_classes
+        self.device = device
         self.metrics = self.init_metrics()
         self.loss = AverageMeter()
         self.df = pd.DataFrame(data={name: [] for name in self.metrics.keys()})
@@ -55,7 +56,7 @@ class Metrics:
     def init_metrics(self):
         metrics = {}
         for metric in self.metric_classes:
-            m = {'func': metric['func'](**metric.get('param', {})),
+            m = {'func': metric['func'](**metric.get('param', {})).to(self.device),
                  'AverageMeter': AverageMeter()
                  }
             metrics[metric['name']] = m
@@ -92,7 +93,6 @@ class Metrics:
 
     def to_df(self):
         return pd.DataFrame.from_records(self.records)
-
 
 
 class AverageMeter(object):
