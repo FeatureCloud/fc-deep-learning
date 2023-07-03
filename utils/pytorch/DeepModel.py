@@ -20,7 +20,7 @@ import torch
 import numpy as np
 import abc
 from utils.pytorch.utils import LocalUpdates, Metrics
-from utils.utils import to_numpy
+from utils.utils import to_numpy, to_list
 import pdb
 
 class Trainer(abc.ABC):
@@ -219,6 +219,7 @@ class Trainer(abc.ABC):
             print(len(w[0]))
         else:
             print(len(w))
+        print(self.device)
         with torch.no_grad():
             for i, (name, param) in enumerate(self.model.named_parameters()):
 
@@ -230,8 +231,11 @@ class Trainer(abc.ABC):
                 # print(p.dtype)
                 # pdb.set_trace()
                 if p.dtype == object:
-                    tensor_list = [torch.tensor(obj) for obj in p]
-                    param.data = torch.stack(tensor_list).to(device=self.device, dim=0)
+                    param.data = torch.tensor(to_list(p)).to(device=self.device)
+                    # tensor_list = []
+                    # for obj in p:
+                    #     tensor_list.append(torch.tensor(obj))
+                    # param.data = torch.stack(tensor_list).to(device=self.device, dim=0)
                     # param.data = torch.Tensor(p).to(device=self.device)
                 else:
                     param.data = torch.from_numpy(p).to(device=self.device)
