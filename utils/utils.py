@@ -289,7 +289,6 @@ def to_numpy(lst, dtype='float32', skip_obj_dtype=False):
         try:
             return np.array(np_arr, dtype=dtype)
         except:
-            print("here")
             if skip_obj_dtype:
                 return np_arr
             return np.array(np_arr, dtype='object')
