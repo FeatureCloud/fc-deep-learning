@@ -24,12 +24,8 @@ import importlib.util
 import importlib
 import sys
 import os
-# from utils.pytorch import DataLoader as SupportedLoaders
 from itertools import compress
 import torch.optim as optim
-# from utils.pytorch import optimizer as SupportedAggregators
-# from utils.pytorch import DeepModel
-from utils import pytorch
 
 def set_device(device):
     return torch.device('cuda' if torch.cuda.is_available() and device.lower() == 'gpu' else 'cpu')
@@ -48,13 +44,14 @@ def get_root_path(input=True):
     return f"mnt/output"
 
 
-def get_trainer(name):
+def get_trainer(name, root_dir):
     return get_custom_module(module=name,
                              existing=importlib.import_module('utils.pytorch.DeepModel'),
+                             root_dir=root_dir,
                              class_name='CustomTrainer')
 
 
-def get_aggregator(name):
+def get_aggregator(name, root_dir):
     """
 
     Parameters
@@ -69,10 +66,11 @@ def get_aggregator(name):
     """
     return get_custom_module(module=name,
                              existing=importlib.import_module('utils.pytorch.optimizer'),
+                             root_dir=root_dir,
                              class_name='CustomAggregator')
 
 
-def get_dataloader(name):
+def get_dataloader(name, root_dir):
     """ Loading the class of some module that maybe implemented in models or uploaded by the user
     The Costume DataLoader should be always named `CustomDataLoader`
     And should have followings:
@@ -91,10 +89,11 @@ def get_dataloader(name):
     """
     return get_custom_module(module=name,
                              existing=importlib.import_module('utils.pytorch.DataLoader'),
+                             root_dir=root_dir,
                              class_name='CustomDataLoader')
 
 
-def get_metrics(name, package):
+def get_metrics(name, package, root_dir):
     """ return the class of metrics that can be provided in one of the following ways:
         1. supported metrics in torchmetrics
         2. custom metrics that should be implemented in a similar fashion to torchmetrics
@@ -115,10 +114,11 @@ def get_metrics(name, package):
     """
     return get_custom_module(module=name,
                              existing=importlib.import_module(package),
+                             root_dir=root_dir,
                              class_name='CustomMetric')
 
 
-def get_loss_func(name):
+def get_loss_func(name, root_dir):
     """ return the class of loss that can be provided in one of the following ways:
         1. supported losses in torch.nn
         2. custom loss that should be implemented as a class (methods are not supported)
@@ -137,10 +137,11 @@ def get_loss_func(name):
     """
     return get_custom_module(module=name,
                              existing=nn,
+                             root_dir=root_dir,
                              class_name='CustomLoss')
 
 
-def get_optimizer(name):
+def get_optimizer(name, root_dir):
     """ return the class of optimizer that can be provided in one of the following ways:
         1. supported optimizers in torch.optim
         2. custom optimizer that should be implemented as a class
@@ -158,10 +159,11 @@ def get_optimizer(name):
     """
     return get_custom_module(module=name,
                              existing=optim,
+                             root_dir=root_dir,
                              class_name='CustomOptimizer')
 
 
-def get_custom_module(module, existing, class_name=None):
+def get_custom_module(module, existing, root_dir, class_name=None):
     """ Loading the class of some module that maybe implemented in models or uploaded by the user
         This method supports following custom modules:
             * DataLoader
@@ -170,6 +172,7 @@ def get_custom_module(module, existing, class_name=None):
             * optimizer
     Parameters
     ----------
+    root_dir
     module: str
         name of the module (or.py file including it)
     existing: python class
@@ -184,7 +187,7 @@ def get_custom_module(module, existing, class_name=None):
         return getattr(existing, module)
     if '.py' in module:
         dl = f"{module.split('.')[0]}.{class_name}"
-        spec = importlib.util.spec_from_file_location(dl, f"{get_root_path()}/{module}")
+        spec = importlib.util.spec_from_file_location(dl, f"{root_dir}/{module}")
         foo = importlib.util.module_from_spec(spec)
         sys.modules["module.name"] = foo
         spec.loader.exec_module(foo)
@@ -192,10 +195,10 @@ def get_custom_module(module, existing, class_name=None):
     return None
 
 
-def design_architecture(config, data_loader):
+def design_architecture(config, data_loader, root_dir):
     if 'name' in config:
         name = config.pop('name')
-        return lambda: get_custom_module(module=name, existing=models, class_name='Model')(**config), {}
+        return lambda: get_custom_module(module=name, existing=models, class_name='Model', root_dir=root_dir)(**config), {}
     sample_data = next(iter(data_loader))[0]
     layer_default = {}
     layers = []

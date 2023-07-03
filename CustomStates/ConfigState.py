@@ -15,8 +15,6 @@ import bios
 import os
 import shutil
 from FeatureCloud.app.engine.app import AppState, LogLevel
-from utils.utils import get_root_path
-
 
 class State(AppState):
     """
@@ -51,7 +49,9 @@ class State(AppState):
     finalize_config()
     """
 
-    def __init__(self, app_name, input_dir: str = get_root_path(), output_dir: str = get_root_path(input=False)):
+    # def __init__(self, app_name, input_dir: str, output_dir: str):
+    def __init__(self, app_name, input_dir, output_dir):
+
         self.config = {}
         self.input_dir = input_dir
         self.output_dir = output_dir
@@ -59,6 +59,16 @@ class State(AppState):
         self.mode = 'file'
         self.dir = '.'
         self.app_name = app_name
+
+
+    # def initialize(self, app_name, input_dir: str, output_dir: str):
+    #     self.config = {}
+    #     self.input_dir = input_dir
+    #     self.output_dir = output_dir
+    #     self.config_file = f"{self.input_dir}/config.yml"
+    #     self.mode = 'file'
+    #     self.dir = '.'
+    #     self.app_name = app_name
 
     def lazy_init(self):
         """ Add new key-value pairs into the `Utils-internal` dictionary, shared memory between states so that they can be accessible for other states.

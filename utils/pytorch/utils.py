@@ -113,3 +113,9 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+
+
+def write_preds(model, dl, pred_file, target_file):
+    y_pred, y_true = model.predict(dl)
+    pd.DataFrame(y_pred, columns=['y_pred']).to_csv(pred_file, index=None)
+    pd.DataFrame(y_true, columns=['y_true']).to_csv(target_file, index=None)

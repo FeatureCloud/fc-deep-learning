@@ -32,12 +32,13 @@ class FedOptimizer(abc.ABC):
         """
 
     @abc.abstractmethod
-    def aggregate_smpc(self, params):
+    def aggregate_smpc(self, params, n_clients: int):
         """ Aggregate results of SMPC
 
         Parameters
         ----------
         params
+        n_clients
 
         Returns
         -------
@@ -141,7 +142,7 @@ class FedAvg(FedOptimizer):
             updated_weights.append(w / n)
         self.global_weights = updated_weights
 
-    def aggregate_smpc(self, params):
+    def aggregate_smpc(self, params, n_clients):
         global_weights = [to_numpy(model) / total_n_sample for model, total_n_sample in params]
         self.weights = global_weights
 

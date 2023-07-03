@@ -68,25 +68,30 @@ class Trainer(abc.ABC):
 
         for k, v in train_config.items():
             setattr(self, k, v)
-
         self.model = model(**config)
         self.model.to(device=self.device)
 
         # initialize loss
-        loss = attributes.pop('loss')
-        loss_func = loss['func']
-        loss_param = loss.get('param', {})
-        self.loss_func = loss_func(**loss_param).to(device=self.device)
+        self.loss_func = self.loss_instance(attributes)
 
         # initialize optimizer
+        self.optimizer = self.opt_instance(attributes)
+
+        self.req_local_updates = req_local_updates
+        self.n_trained_samples = None
+
+    def opt_instance(self, attributes):
         opt = attributes.pop('optimizer')
         opt_func = opt['opt']
         opt_param = opt.get('param', {})
         opt_param.update({'params': self.model.parameters()})
-        self.optimizer = opt_func(**opt_param)
+        return opt_func(**opt_param)
 
-        self.req_local_updates = req_local_updates
-        self.n_trained_samples = None
+    def loss_instance(self, attributes):
+        loss = attributes.pop('loss')
+        loss_func = loss['func']
+        loss_param = loss.get('param', {})
+        return loss_func(**loss_param).to(device=self.device)
 
     def get_module(self, module_class, module, params, to_device=False):
         mod = getattr(module_class, module)(**params)
@@ -254,7 +259,7 @@ class BasicTrainer(Trainer):
         super(BasicTrainer, self).__init__(**kwargs)
         self.n_trained_samples = 0
 
-    def train_on_batch(self, data, targets):
+    def train_on_batch(self, data, targets, **kwargs):
         """ train the network on entire data in one pass
 
         Parameters
