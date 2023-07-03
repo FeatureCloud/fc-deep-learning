@@ -36,7 +36,7 @@ def device_generator():
 devices = device_generator()
 def set_device(device):
     if torch.cuda.is_available() and device.strip().lower() == 'gpu':
-        return next(device)
+        return next(devices)
     return torch.device("cpu")
 
 
