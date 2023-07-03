@@ -181,6 +181,7 @@ class LocalUpdate(AppState, ABC):
         global_update_dict = self.preprocess_global_updates(iteration, received_data)
 
         if all(global_update_dict['stoppage']):
+            print(np.shape(global_update_dict['weights']))
             self.store('weights', global_update_dict['weights'])
             return 'Converged'
 
@@ -242,7 +243,7 @@ class GlobalAggregation(AppState, ABC):
 
         self.broadcast_data(data_to_send, send_to_self=True)
         global_update_dict, converged = self.all_converged(data_to_send)
-        print(np.shape(global_update_dict['weights']))
+        # print(np.shape(global_update_dict['weights']))
         if converged:
             self.store('weights', global_update_dict['weights'])
             return "Converged"
