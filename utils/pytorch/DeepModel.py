@@ -229,7 +229,10 @@ class Trainer(abc.ABC):
                 # print(p.dtype)
                 # print(p.dtype)
                 # pdb.set_trace()
-                param.data = torch.from_numpy(p).to(device=self.device)
+                if isinstance(p, list):
+                    param.data = torch.FloatTensor(p).to(device=self.device)
+                else:
+                    param.data = torch.from_numpy(p).to(device=self.device)
 
     def get_gradients(self):
         # TODO
