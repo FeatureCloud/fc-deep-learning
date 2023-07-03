@@ -157,7 +157,7 @@ class Initialization(ExtendedConfigState, ABC):
         self.store('smpc_used', self.config.get('use_smpc', False))
         self.store('iteration', 0)
         self.store('config', self.config)
-
+        self.store("output_dir", self.output_dir)
 
 class LocalUpdate(AppState, ABC):
     """ Local Model training
@@ -289,7 +289,7 @@ class WriteResults(AppState, ABC):
         self.update(message=f"Writing Results")
         client_model = self.load('client_model')
         central_test_loader = self.load('test_loader')
-        central_pred_file, central_target_file = utils.get_path_to_central_test_output_files()
+        central_pred_file, central_target_file = utils.get_path_to_central_test_output_files(self.load('output_dir'))
         test_loaders = self.load('test_loaders')
         pred_files = self.load('output_files')['pred']
         target_files = self.load('output_files')['target']

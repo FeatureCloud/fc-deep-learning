@@ -317,9 +317,9 @@ def inject_root_path_to_clients_dir(client_dir, dirs, input=True):
     return injected_dirs
 
 
-def get_path_to_central_test_output_files():
-    central_pred_file = f"{get_root_path(input=False)}/central_pred.csv"
-    central_target_file = "get_root_path(input=False)/central_target.csv"
+def get_path_to_central_test_output_files(output_dir):
+    central_pred_file = f"{output_dir}/central_pred.csv"
+    central_target_file = f"{output_dir}/central_target.csv"
     return central_pred_file, central_target_file
 
 
