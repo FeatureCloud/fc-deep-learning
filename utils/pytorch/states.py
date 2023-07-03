@@ -181,7 +181,7 @@ class LocalUpdate(AppState, ABC):
         global_update_dict = self.preprocess_global_updates(iteration, received_data)
 
         if all(global_update_dict['stoppage']):
-            self.store('weights', global_update_dict['weights'])
+            self.store('weights', global_update_dict['weights'][0])
             return 'Converged'
 
         global_update_dict, self.backup, train_loaders, test_loaders = \
