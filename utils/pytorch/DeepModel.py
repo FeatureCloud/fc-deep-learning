@@ -217,7 +217,7 @@ class Trainer(abc.ABC):
         """
         if len(w) == 1:
             print("w1",len(w[0]))
-            w=w[0]
+            w=np.squeeze(w)
         else:
             print(len(w))
         print(self.device)
