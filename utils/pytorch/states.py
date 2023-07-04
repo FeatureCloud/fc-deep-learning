@@ -290,7 +290,7 @@ class WriteResults(AppState, ABC):
         self.update(message=f"Writing Results")
         client_model = self.load('client_model')
         central_test_loader = self.load('test_loader')
-        central_pred_file, central_target_file = utils.get_path_to_central_test_output_files(self.load('output_dir'))
+        # central_pred_file, central_target_file = utils.get_path_to_central_test_output_files(self.load('output_dir'))
         test_loaders = self.load('test_loaders')
         pred_files = self.load('output_files')['pred']
         target_files = self.load('output_files')['target']
@@ -298,9 +298,13 @@ class WriteResults(AppState, ABC):
 
         # write_central_test_results
         if self.is_coordinator and central_test_loader is not None:
-            client_model.set_weights(self.load('weights'))
-            self.log(f"Writing the results for centralized test")
-            write_preds(client_model, central_test_loader, central_pred_file, central_target_file)
+            # Same test-set but different splits and weights
+            for w, pred_file, target_file in zip(self.load('output_files')['central_pred'],
+                                                 self.load('output_files')['central_target'],
+                                                 self.load('weights')):
+                client_model.set_weights(w)
+                self.log(f"Writing the results for centralized test")
+                write_preds(client_model, central_test_loader, pred_file, target_file)
 
         # write_local_test_results
         for counter, (dl, w, pred_file, target_file) in enumerate(zip(test_loaders,

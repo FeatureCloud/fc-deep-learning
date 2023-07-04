@@ -23,6 +23,9 @@ fc_deep:
   result:
     pred: "y_pred.csv"
     target: "y_test.csv"
+    central_pred: "central_pred.csv"
+    central_target: "central_target.csv"
+
     model: "model.pt"
 
 
