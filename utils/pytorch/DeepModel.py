@@ -216,7 +216,7 @@ class Trainer(abc.ABC):
 
         """
         if len(w) == 1:
-            print(len(w[0]))
+            print("w1",len(w[0]))
         else:
             print(len(w))
         print(self.device)
