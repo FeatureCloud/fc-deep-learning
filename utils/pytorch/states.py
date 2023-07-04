@@ -240,8 +240,8 @@ class GlobalAggregation(AppState, ABC):
         data_to_send = self.aggregate(received_params, self.load('client_model'), self.load('test_loader'))
 
         self.store('received_data', data_to_send)
-
-        self.broadcast_data(data_to_send, send_to_self=True)
+        # coordinator has the weights in client_model
+        self.broadcast_data(data_to_send, send_to_self=False)
         global_update_dict, converged = self.all_converged(data_to_send)
         if converged:
             self.store('weights', global_update_dict['weights'])
