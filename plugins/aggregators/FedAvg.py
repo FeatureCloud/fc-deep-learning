@@ -28,14 +28,14 @@ class CustomAggregator(FedOptimizer):
             updated_weights.append(w / n)
         self.global_weights = updated_weights
 
-    def aggregate_smpc(self, params, n_clients):
+    def aggregate_smpc(self, params):
         global_weights = [to_numpy(model) / total_n_sample for model, total_n_sample in params]
         self.weights = global_weights
 
     def post_aggregate(self, **kwargs):
         metrics = kwargs['metrics']
         iter_limit = self.iteration >= self.max_iter
-        self.stopping_criteria = [[iter_limit]] * len(metrics)
+        self.stopping_criteria = [iter_limit] * len(metrics)
 
     @property
     def stoppage(self):
