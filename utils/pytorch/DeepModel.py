@@ -23,6 +23,7 @@ from utils.pytorch.utils import LocalUpdates, Metrics
 from utils.utils import to_numpy, to_list
 import pdb
 
+
 class Trainer(abc.ABC):
     """ Deep Convolutional Network
     Attributes
@@ -68,7 +69,6 @@ class Trainer(abc.ABC):
         metrics = attributes.pop('metrics')
         self.metrics = Metrics(metrics, self.device)
         self.train_metrics_hist, self.test_metrics_hist = [], []
-
 
         self.model = model(**config)
         self.model.to(device=self.device)
