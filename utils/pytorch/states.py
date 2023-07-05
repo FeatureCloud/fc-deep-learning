@@ -279,8 +279,8 @@ class GlobalAggregation(AppState, ABC):
                 self.update(message=f"#{self.load('iteration')}: Test G model")
                 self.log(f"Iteration #{self.load('iteration')}: Testing Global model #{counter}")
                 client_model.set_weights(w)
-                m = client_model.evaluate(test_set)
-                metrics.append(m)
+                client_model.evaluate(test_set)
+                metrics.append(self.client_model.model.metrics.tabular())
         return metrics
 
     def gather_local_models(self):
