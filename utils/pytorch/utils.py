@@ -73,7 +73,7 @@ class Metrics:
         self.loss.update(loss, d_size)
         for name, metric in self.metrics.items():
             perf = metric['func'](pred, target)
-            metric['AverageMeter'].update(perf, d_size)
+            metric['AverageMeter'].update(perf.item(), d_size)
 
     def logs(self, epoch=None, train=True):
         phase = "train" if train else "test"
