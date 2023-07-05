@@ -127,7 +127,6 @@ class Initialization(ExtendedConfigState, ABC):
 
     def run(self) -> str or None:
         self.initialize()
-
         dl = self.get_dataloader(self.load('input_files')['train'][0])
         self.get_custom_modules()
         data_cv_folds = zip(self.load('input_files')['train'], self.load('input_files')['test'])
@@ -168,6 +167,7 @@ class LocalUpdate(AppState, ABC):
 
     def run(self) -> str or None:
         client_model = self.load('client_model')
+        client_model.model.log = self.log
         train_loaders = self.load('train_loaders')
         test_loaders = self.load('test_loaders')
         iteration = self.load('iteration')
@@ -234,10 +234,12 @@ class LocalUpdate(AppState, ABC):
 
 class GlobalAggregation(AppState, ABC):
     def run(self) -> str or None:
+        self.client_model = self.load('client_model')
+        self.client_model.model.log = self.log
         self.update(message=f"#{self.load('iteration')}: Waiting for others")
         received_params = self.gather_local_models()
         self.update(message=f"#{self.load('iteration')}: Aggregation")
-        data_to_send = self.aggregate(received_params, self.load('client_model'), self.load('test_loader'))
+        data_to_send = self.aggregate(received_params, self.client_model, self.load('test_loader'))
 
         self.store('received_data', data_to_send)
         # coordinator has the weights in client_model
@@ -255,6 +257,7 @@ class GlobalAggregation(AppState, ABC):
 
     def aggregate(self, received_params, client_model, test_loader):
         aggregator = client_model.aggregator
+        aggregator.iteration += 1
         if self.load('smpc_used'):
             aggregator.aggregate_smpc(received_params, len(self.clients))
         else:
@@ -263,6 +266,7 @@ class GlobalAggregation(AppState, ABC):
                                                   client_model,
                                                   test_loader
                                                   )
+        self.log(metrics)
         aggregator.post_aggregate(metrics=metrics)
         data_to_send = aggregator.get_global_updates()
         return data_to_send
@@ -275,7 +279,8 @@ class GlobalAggregation(AppState, ABC):
                 self.update(message=f"#{self.load('iteration')}: Test G model")
                 self.log(f"Iteration #{self.load('iteration')}: Testing Global model #{counter}")
                 client_model.set_weights(w)
-                metrics.append(client_model.evaluate(test_set))
+                m = client_model.evaluate(test_set)
+                metrics.append(m)
         return metrics
 
     def gather_local_models(self):
@@ -289,6 +294,7 @@ class WriteResults(AppState, ABC):
         self.config = self.load('config')
         self.update(message=f"Writing Results")
         client_model = self.load('client_model')
+        client_model.model.log = self.log
         central_test_loader = self.load('test_loader')
         # central_pred_file, central_target_file = utils.get_path_to_central_test_output_files(self.load('output_dir'))
         test_loaders = self.load('test_loaders')
@@ -299,7 +305,7 @@ class WriteResults(AppState, ABC):
         # write_central_test_results
         if self.is_coordinator and central_test_loader is not None:
             # Same test-set but different splits and weights
-            for w, pred_file, target_file in zip(self.load('output_files')['central_pred'],
+            for pred_file, target_file, w in zip(self.load('output_files')['central_pred'],
                                                  self.load('output_files')['central_target'],
                                                  self.load('weights')):
                 client_model.set_weights(w)
