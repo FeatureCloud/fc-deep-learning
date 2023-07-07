@@ -59,7 +59,7 @@ class ClientModels:
         self.aggregator = aggregator
         self.num_trained_samples = 0
 
-    def update(self, data_loader, global_updates, backup, test_loader):
+    def update(self, data_loader, global_updates, backup, test_loader, tsboard):
         """update client's model for all of its data for E epochs
             and decreases the learning rate of DNN.
 
@@ -78,7 +78,7 @@ class ClientModels:
         self.model.set_weights(global_updates['weights'])
         self.model.set_optimizer_params(backup)
 
-        self.model.fit(data_loader, test_loader, global_updates['config'], **{})
+        self.model.fit(data_loader, test_loader, global_updates['config'], tsboard, **{})
 
     def get_local_updates(self, l_update_schema):
         """ Get the local parameters, n_samples, etc. that are needed by the aggregator

@@ -285,11 +285,12 @@ class BasicTrainer(Trainer):
             p.grad = g
         self.optimizer.step()
 
-    def fit(self, train_loader, validation=None, train_config=None):
+    def fit(self, train_loader, validation=None, train_config=None, tsboard: dict = None):
         """
 
         Parameters
         ----------
+        tsboard
         train_config
         train_loader
         validation
@@ -305,4 +306,10 @@ class BasicTrainer(Trainer):
                 self.train_on_batch(data[0], data[1])
             self.log(self.metrics.logs(epoch=e))
             self.per_epoch_validation(validation, e + 1)
+            self.update_tsboard(tsboard, e)
         self.n_trained_samples = len(train_loader)
+
+    def update_tsboard(self, tsboard, epoch):
+        if tsboard:
+            tsboard['writer'].update(tsboard['id'], tsboard['model'], self.metrics.dict(), state="LocalTrain")
+            tsboard['writer'].write_summaries(epoch)

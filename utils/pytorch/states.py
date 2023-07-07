@@ -5,12 +5,12 @@ from FeatureCloud.app.engine.app import AppState, LogLevel
 from FeatureCloud.app.engine.app import State as op_state
 from CustomStates import ConfigState
 from utils import utils
-from utils.pytorch.utils import LocalUpdates, GlobalUpdates
-from utils.pytorch.utils import write_preds
+from utils.pytorch.utils import LocalUpdates, GlobalUpdates, write_preds, TensorBoardWriter
 from utils.pytorch.ClientModels import ClientModels
 import pandas as pd
 from copy import deepcopy
-import torch
+import copy
+
 
 # DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -80,7 +80,7 @@ class ExtendedConfigState(ConfigState.State, ABC):
                               attributes=self.trainer_config,
                               req_local_updates=self.load('local_update_schema'),
                               log=self.log,
-                              train_config=self.config['train_config'],
+                              train_config=copy.deepcopy(self.config['train_config']),
                               **self.config['trainer'].get('param', {}))
 
         aggregator = None
@@ -122,15 +122,17 @@ class Initialization(ExtendedConfigState, ABC):
 
     """
 
-    # def __init__(self):
-    #     super().__init__(app_name, input_dir, output_dir)
-
     def run(self) -> str or None:
         self.initialize()
         dl = self.get_dataloader(self.load('input_files')['train'][0])
         self.get_custom_modules()
+        metrics = [m["name"] for m in self.trainer_config['metrics']]
         data_cv_folds = zip(self.load('input_files')['train'], self.load('input_files')['test'])
         client_model, train_loaders, test_loaders = self.load_clients_data(data_cv_folds, dl)
+        models = [f"Model{i}" for i in range(len(train_loaders))]
+        logdir = f"{self.output_dir}/TsBoard_logs"
+        tsboard_writer = TensorBoardWriter(logdir, [self.id], models, metrics)
+        self.store("tsboard_writer", tsboard_writer)
         test_loader = None
         if self.is_coordinator:
             if self.config['local_dataset'].get('central_test', None) is not None:
@@ -158,6 +160,7 @@ class Initialization(ExtendedConfigState, ABC):
         self.store('config', self.config)
         self.store("output_dir", self.output_dir)
 
+
 class LocalUpdate(AppState, ABC):
     """ Local Model training
         Input:
@@ -166,6 +169,7 @@ class LocalUpdate(AppState, ABC):
     """
 
     def run(self) -> str or None:
+        self.tsboard_writer = self.load("tsboard_writer")
         client_model = self.load('client_model')
         client_model.model.log = self.log
         train_loaders = self.load('train_loaders')
@@ -213,23 +217,28 @@ class LocalUpdate(AppState, ABC):
         for counter, (tr_dl, test_dl, updates, backup) in enumerate(
                 zip(train_loaders, test_loaders, cv_first_updates, self.backup)):
             self.log(f"Iteration {iteration}: Update model #{counter}")
-            self.pre_update_eval(client_model, test_dl)
-            client_model.update(tr_dl, updates, backup, test_dl)
+            self.pre_update_eval(client_model, test_dl, counter)
+            tsboard = {"writer": self.tsboard_writer, "id": self.id, "model": f"Model{counter}"}
+            client_model.update(tr_dl, updates, backup, test_dl, tsboard)
             data_to_send.append(client_model.get_local_updates(self.load('local_update_schema')))
-            self.post_update_eval(client_model, test_dl)
+            self.post_update_eval(client_model, test_dl, counter)
             local_backup.append(client_model.local_backup())
         self.backup = local_backup
         return data_to_send
 
-    def pre_update_eval(self, client_model, dl):
+    def pre_update_eval(self, client_model, dl, model_n):
         if dl is not None:
             self.log("Local model evaluation BEFORE local update")
-            client_model.evaluate(dl)
+            metrics = client_model.evaluate(dl)
+            self.tsboard_writer.update(self.id, f"Model{model_n}", metrics, state="PreUpdateLocalTest")
+            self.tsboard_writer.write_summaries(self.load("iteration"))
 
-    def post_update_eval(self, client_model, dl):
+    def post_update_eval(self, client_model, dl, counter):
         if dl is not None:
             self.log("Local model evaluation AFTER local update")
-            client_model.evaluate(dl)
+            metrics = client_model.evaluate(dl)
+            self.tsboard_writer.update(self.id, f"Model{counter}", metrics, state="PostUpdateLocalTest")
+            self.tsboard_writer.write_summaries(self.load("iteration"))
 
 
 class GlobalAggregation(AppState, ABC):
@@ -279,8 +288,10 @@ class GlobalAggregation(AppState, ABC):
                 self.update(message=f"#{self.load('iteration')}: Test G model")
                 self.log(f"Iteration #{self.load('iteration')}: Testing Global model #{counter}")
                 client_model.set_weights(w)
-                client_model.evaluate(test_set)
-                metrics.append(self.client_model.model.metrics.tabular())
+                metrics = client_model.evaluate(test_set)
+                tsboard_writer = self.load("tsboard_writer")
+                tsboard_writer.update(self.id, f"Model{counter}", metrics, state="GlobalTest")
+                tsboard_writer.write_summaries(self.load("iteration"))
         return metrics
 
     def gather_local_models(self):
@@ -291,6 +302,7 @@ class GlobalAggregation(AppState, ABC):
 
 class WriteResults(AppState, ABC):
     def run(self) -> str or None:
+        self.load("tsboard_writer").close()
         self.config = self.load('config')
         self.update(message=f"Writing Results")
         client_model = self.load('client_model')
@@ -391,4 +403,3 @@ class Centralized(ExtendedConfigState, LocalUpdate, GlobalAggregation, ABC):
                 client_model.store_model(model_file)
 
         self.update(message="Finished!")
-
