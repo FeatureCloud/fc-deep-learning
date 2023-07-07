@@ -1,5 +1,6 @@
 from enum import Enum
 import pandas as pd
+from torch.utils.tensorboard import SummaryWriter
 
 
 class LocalUpdates(Enum):
@@ -119,3 +120,84 @@ def write_preds(model, dl, pred_file, target_file):
     y_pred, y_true = model.predict(dl)
     pd.DataFrame(y_pred, columns=['y_pred']).to_csv(pred_file, index=None)
     pd.DataFrame(y_true, columns=['y_true']).to_csv(target_file, index=None)
+
+
+class TensorBoardWriter:
+    def __init__(self, logdir, clients, models, metrics):
+        """
+
+        Parameters
+        ----------
+        clients: Local and Global clients
+        metrics
+        """
+        self.summaries = {}
+        for client in clients:
+            client_dict = {}
+            for model in models:  # splits
+                model_dict = {}
+                for metric in metrics:
+                    model_dict[metric] = {"LocalTrain": None,
+                                          "LocalTest": None,
+                                          "PreUpdateLocalTest": None,
+                                          "PostUpdateLocalTest": None,
+                                          "GlobalTest": None}
+
+                client_dict[model] = model_dict
+            self.summaries[client] = client_dict
+        global_dict = {}
+        for model in models:
+            model_dict = {}
+            for metric in metrics:
+                model_dict[metric] = {"GlobalTest": None}
+            global_dict[model] = model_dict
+        self.summaries["Global"] = global_dict
+        self.writer = SummaryWriter(log_dir=logdir)
+
+    def write_summaries(self, iteration: int):
+        for client_name, client in self.summaries.items():
+            for model_name, model in client.items():
+                for metric_name, metric in model.items():
+                    for state_name, value in metric.items():
+                        if value is not None:
+                            name = f"{client_name}/{model_name}/{metric_name}/{state_name}"
+                            self.writer.add_scalar(name, value, iteration)
+                    self.writer.flush()
+        self.clear_summaries()
+
+    def update(self, client, model, metric, state, value):
+        self.summaries[client][model][metric][state] = value
+
+    def update(self, client, model, metrics, state):
+        for k, v in metrics.items():
+            if key_exist(self.summaries, k):
+                self.summaries[client][model][k][state] = v
+            else:
+                raise NotImplementedError(f"{k} is not in the 'summaries'")
+
+    def update_summaries(self, summaries):
+        self.summaries = summaries
+
+    def clear_summaries(self):
+        set_dict_values_to_none(self.summaries)
+
+    def close(self):
+        self.writer.close()
+
+
+def set_dict_values_to_none(dictionary):
+    for key, value in dictionary.items():
+        if isinstance(value, dict):
+            set_dict_values_to_none(value)  # Recursively call the function for nested dictionaries
+        else:
+            dictionary[key] = None
+
+
+def key_exist(dictionary, key):
+    if key in dictionary:
+        return True
+    for value in dictionary.values():
+        if isinstance(value, dict):
+            if key_exist(value, key):  # Recursively call the function for nested dictionaries
+                return True
+    return False
