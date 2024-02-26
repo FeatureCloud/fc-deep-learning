@@ -266,7 +266,7 @@ class GlobalAggregation(AppState, ABC):
             self.update(message=f"Global aggregation")
             if test_set is not None:
                 self.update(message=f"#{self.load('iteration')}: Test G model")
-                self.log(f"Iteration #{self.load('iteration')}: Testing Global model #{counter}")
+                self.log(f"Iteration #{self.load('iteration')}: Testing Global model on global test set #{counter}")
                 client_model.set_weights(w)
                 metrics.append(client_model.evaluate(test_set))
         return metrics
@@ -296,8 +296,8 @@ class WriteResults(AppState, ABC):
 
     def write_central_test_results(self, client_model, test_loader, pred_file, target_file, weights):
         if self.is_coordinator and test_loader is not None:
-            client_model.set_weights(weights)
             self.log(f"Writing the results for centralized test")
+            client_model.set_weights(weights[0])
             y_pred, y_true = client_model.predict(self.load('test_loader'))
             pd.DataFrame(y_pred, columns=['y_pred']).to_csv(pred_file, index=None)
             pd.DataFrame(y_true, columns=['y_true']).to_csv(target_file, index=None)

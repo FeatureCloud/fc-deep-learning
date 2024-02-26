@@ -273,9 +273,9 @@ def to_numpy(lst, dtype='float32', skip_obj_dtype=False):
         try:
             return np.array(np_arr, dtype=dtype)
         except:
-            print("here")
             if skip_obj_dtype:
                 return np_arr
+            print(f"np array of {dtype} cannot be created from the list: {lst}")
             return np.array(np_arr, dtype='object')
     return lst
 
@@ -304,7 +304,7 @@ def inject_root_path_to_clients_dir(client_dir, dirs, input=True):
 
 def get_path_to_central_test_output_files():
     central_pred_file = f"{get_root_path(input=False)}/central_pred.csv"
-    central_target_file = "get_root_path(input=False)/central_target.csv"
+    central_target_file = f"{get_root_path(input=False)}/central_target.csv"
     return central_pred_file, central_target_file
 
 
