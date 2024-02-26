@@ -266,9 +266,10 @@ class GlobalAggregation(AppState, ABC):
             self.update(message=f"Global aggregation")
             if test_set is not None:
                 self.update(message=f"#{self.load('iteration')}: Test G model")
-                self.log(f"Iteration #{self.load('iteration')}: Testing Global model on global test set #{counter}")
                 client_model.set_weights(w)
-                metrics.append(client_model.evaluate(test_set))
+                m = client_model.evaluate(test_set)
+                metrics.append(m)
+                self.log(f"Iteration #{self.load('iteration')}: Testing Global model on global test set #{counter}: {m}")
         return metrics
 
     def gather_local_models(self):
