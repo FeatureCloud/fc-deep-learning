@@ -167,7 +167,7 @@ class LocalUpdate(AppState, ABC):
         iteration = self.load('iteration')
         n_splits = len(train_loaders)
         self.backup = [client_model.local_backup()] * n_splits
-        self.update(message=f"#{self.load('iteration') + 1}: Waiting for Coordinator")
+        self.update(message=f"#{self.load('iteration')}: Waiting for Coordinator")
         if self.is_coordinator and iteration > 0:
             received_data = self.load('received_data')
         else:
